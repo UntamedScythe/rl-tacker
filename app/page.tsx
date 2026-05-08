@@ -2,6 +2,8 @@
 
 import { useState, useRef } from 'react'
 import { generateAdvice, type Stats, type Tip } from '@/lib/advice'
+import RadarChartComponent from '@/components/RadarChartComponent'
+import FieldZoneChart from '@/components/FieldZoneChart'
 
 const PLATFORMS = [
   { value: 'steam', label: 'Steam' },
@@ -305,6 +307,13 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+
+              {/* Charts */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <RadarChartComponent stats={displayStats} />
+                <FieldZoneChart stats={displayStats} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
