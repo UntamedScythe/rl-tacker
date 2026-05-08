@@ -174,10 +174,10 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto px-5 py-16 space-y-16">
+      <div className="max-w-5xl mx-auto px-4 sm:px-5 py-10 sm:py-16 space-y-12 sm:space-y-16">
         <div className="max-w-2xl mx-auto text-center space-y-8">
           <div className="space-y-3">
-            <h1 className="text-[2.6rem] font-semibold tracking-[-0.04em] leading-none">
+            <h1 className="text-3xl sm:text-[2.6rem] font-semibold tracking-[-0.04em] leading-tight sm:leading-none">
               Know your game.<br /><span className="text-white/30">Improve it.</span>
             </h1>
             <p className="text-white/40 text-sm leading-relaxed">
@@ -286,24 +286,24 @@ export default function Home() {
           const groups = STAT_GROUPS(displayStats)
           return (
             <div className="space-y-10">
-              <div className="flex items-center justify-between border-b border-white/[0.06] pb-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/[0.06] pb-5">
                 <div>
-                  <p className="text-2xl font-semibold tracking-tight">
+                  <p className="text-xl sm:text-2xl font-semibold tracking-tight">
                     {tab === 'id' ? `${idResult?.replayCount} replays analyzed` : '1 replay analyzed'}
                   </p>
                   <p className="text-white/30 text-sm mt-0.5">
                     {tab === 'id' ? 'Most recent public games' : `Viewing as ${selectedPlayer?.name}`}
                   </p>
                 </div>
-                <div className="flex gap-3 text-sm">
+                <div className="flex gap-2 sm:gap-3">
                   {[
                     { label: 'Issues',    count: tips.filter(t => t.severity === 'critical').length, color: 'text-red-400' },
                     { label: 'Warnings',  count: tips.filter(t => t.severity === 'warning').length,  color: 'text-amber-400' },
                     { label: 'Strengths', count: tips.filter(t => t.severity === 'good').length,     color: 'text-emerald-400' },
                   ].map(({ label, count, color }) => (
-                    <div key={label} className="text-center bg-white/[0.03] border border-white/[0.06] rounded-xl px-4 py-2.5">
-                      <p className={`text-xl font-semibold ${color}`}>{count}</p>
-                      <p className="text-white/30 text-[11px] mt-0.5">{label}</p>
+                    <div key={label} className="flex-1 sm:flex-none text-center bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 sm:px-4 py-2.5">
+                      <p className={`text-lg sm:text-xl font-semibold ${color}`}>{count}</p>
+                      <p className="text-white/30 text-[10px] sm:text-[11px] mt-0.5">{label}</p>
                     </div>
                   ))}
                 </div>

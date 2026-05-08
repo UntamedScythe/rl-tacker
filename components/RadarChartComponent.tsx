@@ -121,13 +121,13 @@ export default function RadarChartComponent({ stats }: { stats: Stats }) {
       </div>
 
       {/* Rank selector */}
-      <div className="flex gap-1.5 mb-4 flex-wrap">
+      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1 scrollbar-none">
         {RANKS.map(rank => (
           <button
             key={rank.key}
             onClick={() => setSelectedRank(rank.key as RankKey)}
             title={rank.full}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all border ${
+            className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium transition-all border ${
               selectedRank === rank.key
                 ? 'border-transparent text-black'
                 : 'border-white/[0.08] text-white/40 hover:text-white/70 hover:border-white/20'
