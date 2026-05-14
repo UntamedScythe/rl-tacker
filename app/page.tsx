@@ -1,10 +1,20 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { generateAdvice, type Stats, type Tip } from '@/lib/advice'
+import { useState, useRef, useEffect } from 'react'
+import { generateAdvice, type Stats, type Tip, type Teammate } from '@/lib/advice'
 import RadarChartComponent from '@/components/RadarChartComponent'
 import FieldZoneChart from '@/components/FieldZoneChart'
 
+
+const PLAYLISTS = [
+  { value: '',                   label: 'All Modes' },
+  { value: 'ranked-doubles',     label: 'Ranked 2v2' },
+  { value: 'ranked-standard',    label: 'Ranked 3v3' },
+  { value: 'ranked-duels',       label: 'Ranked 1v1' },
+  { value: 'unranked-doubles',   label: 'Casual 2v2' },
+  { value: 'unranked-standard',  label: 'Casual 3v3' },
+  { value: 'unranked-duels',     label: 'Casual 1v1' },
+]
 const PLATFORMS = [
   { value: 'steam', label: 'Steam' },
   { value: 'epic', label: 'Epic' },
@@ -100,26 +110,65 @@ function singleReplayToStats(rawStats: Record<string, Record<string, number>>): 
 }
 
 export default function Home() {
-  const [tab, setTab] = useState<'id' | 'upload'>('upload')
+  const [tab, setTab] = useState<'id' | 'upload'>('id')
   const [playerId, setPlayerId] = useState('')
   const [platform, setPlatform] = useState('steam')
+  const [playlist, setPlaylist] = useState('')
   const [idLoading, setIdLoading] = useState(false)
   const [idResult, setIdResult] = useState<ApiResponse | null>(null)
+  const [autoSearch, setAutoSearch] = useState(false)
+  const [searchedPlayer, setSearchedPlayer] = useState<{ name: string; avatarUrl?: string; id: string; platform: string } | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null)
   const [selectedPlayer, setSelectedPlayer] = useState<UploadPlayer | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Auto-trigger search when a teammate is clicked
+  useEffect(() => {
+    if (!autoSearch || !playerId.trim()) return
+    setAutoSearch(false)
+    setIdResult(null)
+    setSearchedPlayer(null)
+    runSearch(playerId.trim(), platform, playlist)
+  }, [autoSearch, playerId, platform, playlist])
+
+  async function runSearch(id: string, plat: string, pl: string = '') {
+    setIdLoading(true)
+    setIdResult(null)
+    setSearchedPlayer(null)
+
+    // Fetch stats first so we can get the player name from replay data
+    const playlistParam = pl ? `&playlist=${encodeURIComponent(pl)}` : ''
+    const data = await fetch(`/api/stats?playerId=${encodeURIComponent(id)}&platform=${plat}${playlistParam}`).then(r => r.json())
+    setIdResult(data)
+
+    // Use the name from the replay data as primary source
+    const replayName: string | undefined = data?.stats?.playerName
+    
+    // Then try Steam for avatar (non-blocking)
+    let avatarUrl: string | null = null
+    let displayName = replayName ?? id
+
+    if (plat === 'steam') {
+      try {
+        const nameParam = replayName ? `&name=${encodeURIComponent(replayName)}` : ''
+        const profile = await fetch(`/api/steamprofile?steamId=${encodeURIComponent(id)}${nameParam}`).then(r => r.json())
+        if (profile?.name) displayName = profile.name
+        if (profile?.avatarUrl) avatarUrl = profile.avatarUrl
+      } catch {
+        // Avatar fetch failed — use replay name as fallback, no avatar
+      }
+    }
+
+    setSearchedPlayer({ name: displayName, avatarUrl: avatarUrl ?? undefined, id, platform: plat })
+    setIdLoading(false)
+  }
+
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     if (!playerId.trim()) return
-    setIdLoading(true)
-    setIdResult(null)
-    const res = await fetch(`/api/stats?playerId=${encodeURIComponent(playerId.trim())}&platform=${platform}`)
-    const data: ApiResponse = await res.json()
-    setIdResult(data)
-    setIdLoading(false)
+    runSearch(playerId.trim(), platform, playlist)
   }
 
   async function handleUpload(file: File) {
@@ -167,7 +216,20 @@ export default function Home() {
       <header className="border-b border-white/[0.06] bg-[#080a0f]/90 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-rose-600 flex items-center justify-center text-xs font-bold">RL</div>
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-orange-500 to-rose-600 flex items-center justify-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Rocket body */}
+                <path d="M12 2C12 2 7 7 7 13C7 16.31 9.69 19 13 19C16.31 19 19 16.31 19 13C19 7 12 2 12 2Z" fill="white" fillOpacity="0.95"/>
+                {/* Rocket window */}
+                <circle cx="12.5" cy="11" r="2" fill="#f97316"/>
+                {/* Left fin */}
+                <path d="M7 15L4 19L8 18L7 15Z" fill="white" fillOpacity="0.8"/>
+                {/* Right fin */}
+                <path d="M18 15L21 19L17 18L18 15Z" fill="white" fillOpacity="0.8"/>
+                {/* Flame */}
+                <path d="M10.5 19C10.5 19 10 21 12 22C14 21 13.5 19 13.5 19H10.5Z" fill="#fb923c"/>
+              </svg>
+            </div>
             <span className="font-semibold text-sm tracking-tight">RLTracker</span>
           </div>
           <span style={{ fontFamily: "'DM Mono', monospace" }} className="text-[11px] text-white/20 tracking-widest uppercase">Stats & Advice</span>
@@ -255,21 +317,42 @@ export default function Home() {
 
           {tab === 'id' && (
             <div className="space-y-4">
-              <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2">
-                <select value={platform} onChange={e => setPlatform(e.target.value)}
-                  style={{ fontFamily: "'DM Mono', monospace" }}
-                  className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-xs text-white/70 focus:outline-none focus:border-white/20 sm:w-32 appearance-none">
-                  {PLATFORMS.map(p => <option key={p.value} value={p.value} className="bg-[#0f1117]">{p.label}</option>)}
-                </select>
+              <form onSubmit={handleSearch} className="flex flex-col gap-2">
+                {/* Row 1: Player ID input */}
                 <input type="text" value={playerId} onChange={e => setPlayerId(e.target.value)}
                   placeholder="Player ID (e.g. 76561198201406534)"
                   style={{ fontFamily: "'DM Mono', monospace" }}
-                  className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-xs text-white placeholder-white/20 focus:outline-none focus:border-white/20" />
-                <button type="submit" disabled={idLoading || !playerId.trim()}
-                  className="bg-white text-black font-medium text-sm px-6 py-3 rounded-xl hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all whitespace-nowrap">
-                  {idLoading ? 'Analyzing…' : 'Analyze →'}
-                </button>
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-xs text-white placeholder-white/20 focus:outline-none focus:border-white/20" />
+                {/* Row 2: Platform + Playlist + Button */}
+                <div className="flex gap-2">
+                  <select value={platform} onChange={e => setPlatform(e.target.value)}
+                    style={{ fontFamily: "'DM Mono', monospace" }}
+                    className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-xs text-white/70 focus:outline-none focus:border-white/20 appearance-none w-[30%]">
+                    {PLATFORMS.map(p => <option key={p.value} value={p.value} className="bg-[#0f1117]">{p.label}</option>)}
+                  </select>
+                  <select value={playlist} onChange={e => setPlaylist(e.target.value)}
+                    style={{ fontFamily: "'DM Mono', monospace" }}
+                    className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-xs text-white/70 focus:outline-none focus:border-white/20 appearance-none flex-1">
+                    {PLAYLISTS.map(p => <option key={p.value} value={p.value} className="bg-[#0f1117]">{p.label}</option>)}
+                  </select>
+                  <button type="submit" disabled={idLoading || !playerId.trim()}
+                    className="bg-white text-black font-medium text-sm px-5 py-3 rounded-xl hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all whitespace-nowrap">
+                    {idLoading ? '…' : 'Go →'}
+                  </button>
+                </div>
               </form>
+              {idLoading && (
+                <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 flex items-center gap-3">
+                  <svg className="animate-spin flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.15)" strokeWidth="3"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                  </svg>
+                  <div>
+                    <p className="text-white/60 text-sm">Fetching your replays from Ballchasing…</p>
+                    <p className="text-white/25 text-xs mt-0.5">This takes around 10 seconds — hang tight</p>
+                  </div>
+                </div>
+              )}
               {idResult?.error && (
                 <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4 text-red-400 text-sm">{idResult.error}</div>
               )}
@@ -287,13 +370,27 @@ export default function Home() {
           return (
             <div className="space-y-10">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/[0.06] pb-5">
-                <div>
-                  <p className="text-xl sm:text-2xl font-semibold tracking-tight">
-                    {tab === 'id' ? `${idResult?.replayCount} replays analyzed` : '1 replay analyzed'}
-                  </p>
-                  <p className="text-white/30 text-sm mt-0.5">
-                    {tab === 'id' ? 'Most recent public games' : `Viewing as ${selectedPlayer?.name}`}
-                  </p>
+                <div className="flex items-center gap-3">
+                  {tab === 'id' && searchedPlayer?.avatarUrl && (
+                    <img
+                      src={searchedPlayer.avatarUrl}
+                      alt={searchedPlayer.name}
+                      className="w-12 h-12 rounded-xl border border-white/10 flex-shrink-0"
+                    />
+                  )}
+                  {tab === 'id' && !searchedPlayer?.avatarUrl && (
+                    <div className="w-12 h-12 rounded-xl border border-white/10 bg-white/[0.04] flex items-center justify-center flex-shrink-0">
+                      <span className="text-white/30 text-lg">👤</span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xl sm:text-2xl font-semibold tracking-tight">
+                      {tab === 'id' ? (searchedPlayer?.name ?? playerId) : selectedPlayer?.name ?? 'Player'}
+                    </p>
+                    <p className="text-white/30 text-sm mt-0.5">
+                      {tab === 'id' ? `${idResult?.replayCount} replays analyzed` : '1 replay analyzed'}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex gap-2 sm:gap-3">
                   {[
@@ -335,7 +432,38 @@ export default function Home() {
                 ))}
               </div>
 
-              <div className="space-y-3">
+              {/* Most Played With */}
+              {displayStats.topTeammates && displayStats.topTeammates.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span style={{ fontFamily: "'DM Mono', monospace" }} className="text-[11px] text-white/30 uppercase tracking-widest">Most Played With</span>
+                    <div className="flex-1 h-px bg-white/[0.06]" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {displayStats.topTeammates.map((teammate: Teammate) => (
+                      <button
+                        key={teammate.id}
+                        onClick={() => {
+                          setTab('id')
+                          setPlayerId(teammate.id)
+                          setPlatform(teammate.platform || 'steam')
+                          setPlaylist('')
+                          setAutoSearch(true)
+                        }}
+                        className="flex items-center justify-between bg-white/[0.02] border border-white/[0.06] hover:border-white/20 rounded-xl px-4 py-3 transition-all text-left group"
+                      >
+                        <div>
+                          <p className="text-sm font-medium group-hover:text-white/90 transition-colors">{teammate.name}</p>
+                          <p style={{ fontFamily: "'DM Mono', monospace" }} className="text-[11px] text-white/25 uppercase mt-0.5">{teammate.platform} · {teammate.count} game{teammate.count !== 1 ? 's' : ''} together</p>
+                        </div>
+                        <span className="text-white/20 group-hover:text-white/50 text-xs transition-colors">Analyze →</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+                            <div className="space-y-3">
                 <div className="flex items-center gap-3 mb-6">
                   <span style={{ fontFamily: "'DM Mono', monospace" }} className="text-[11px] text-white/30 uppercase tracking-widest">Improvement Advice</span>
                   <div className="flex-1 h-px bg-white/[0.06]" />

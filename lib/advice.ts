@@ -1,3 +1,10 @@
+export type Teammate = {
+  name: string
+  id: string
+  platform: string
+  count: number
+}
+
 export type Stats = {
   gamesAnalyzed: number
   goalsPerGame: number
@@ -17,6 +24,8 @@ export type Stats = {
   neutralPct: number
   demosInflictedPerGame: number
   demosTakenPerGame: number
+  topTeammates?: Teammate[]
+  playerName?: string
 }
 
 export type Tip = {

@@ -25,9 +25,9 @@ export default function FieldZoneChart({ stats }: { stats: Stats }) {
         <span className="text-[11px] text-white/40 uppercase tracking-widest font-mono">Field Positioning</span>
       </div>
 
-      <div className="flex gap-6 items-start justify-center">
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-center sm:items-start justify-center">
         {/* SVG Field */}
-        <svg width={fieldW} height={fieldH} viewBox={`0 0 ${fieldW} ${fieldH}`} className="flex-shrink-0">
+        <svg width={fieldW} height={fieldH} viewBox={`0 0 ${fieldW} ${fieldH}`} className="flex-shrink-0 w-full max-w-[300px] sm:w-[300px]">
           {/* Field background */}
           <rect x={0} y={0} width={fieldW} height={fieldH} rx={8} fill="rgba(255,255,255,0.02)" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
 
@@ -102,7 +102,7 @@ export default function FieldZoneChart({ stats }: { stats: Stats }) {
         </svg>
 
         {/* Legend */}
-        <div className="space-y-4 pt-2">
+        <div className="flex flex-row sm:flex-col gap-4 sm:gap-4 sm:pt-2 flex-wrap justify-center sm:justify-start">
           {zones.map(zone => (
             <div key={zone.label} className="space-y-1">
               <div className="flex items-center gap-2">
