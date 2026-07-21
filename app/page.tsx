@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { generateAdvice, getPracticeTonight, type Stats, type Tip, type Teammate } from '@/lib/advice'
 import RadarChartComponent from '@/components/RadarChartComponent'
+import Boost, { type BoostState } from '@/components/Boost'
 import FieldZoneChart from '@/components/FieldZoneChart'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ function LogoMark({ size = 28 }: { size?: number }) {
 // ─── Coaching Card ────────────────────────────────────────────────────────────
 // The signature visual element of NeedBoost
 
-function CoachingCard({ tip, index }: { tip: Tip; index: number }) {
+function CoachingCard({ tip, index, onHover }: { tip: Tip; index: number; onHover?: (i: number | null) => void }) {
   const [expanded, setExpanded] = useState(index === 0)
   const sev = tip.severity
 
@@ -119,6 +120,8 @@ function CoachingCard({ tip, index }: { tip: Tip; index: number }) {
     <div
       className={`coaching-card ${sev}`}
       style={{ animationDelay: `${index * 60}ms` }}
+      onMouseEnter={() => onHover?.(index)}
+      onMouseLeave={() => onHover?.(null)}
     >
       <div
         style={{ padding: '16px 20px 16px 24px', cursor: 'pointer' }}
@@ -176,10 +179,11 @@ function AnalysisProgress({ pct }: { pct: number }) {
 
   return (
     <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', padding: '16px 20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div className="status-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#FF5C1A' }} />
-          <p style={{ fontSize: '12px', color: 'var(--chalk-2)' }}>{label}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '12px' }}>
+        <Boost state="analyzing" size={36} />
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: '12px', color: 'var(--chalk-2)', marginBottom: '2px' }}>{label}</p>
+          <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)' }}>Analyzing your habits…</p>
         </div>
         <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: '#FF5C1A' }}>{Math.round(pct)}%</p>
       </div>
@@ -262,6 +266,7 @@ export default function Home() {
 
   // Demo mode
   const [demoMode, setDemoMode] = useState(false)
+  const [highlightedCard, setHighlightedCard] = useState<number | null>(null)
 
   // Auto-search on teammate click
   const autoRef = useRef(false)
@@ -357,6 +362,17 @@ export default function Home() {
   const rankInfo = (demoMode ? SAMPLE_STATS : idResult?.stats)?.playerRank?.tier != null
     ? (RANK_NAMES[(demoMode ? SAMPLE_STATS : idResult!.stats!)!.playerRank!.tier!] ?? null) : null
 
+  // Derive mascot state from app state
+  const boostState: BoostState = idLoading || uploadLoading
+    ? 'analyzing'
+    : activeStats && sorted.length > 0
+      ? (highlightedCard !== null && highlightedCard >= -1)
+        ? 'coaching'
+        : 'success'
+      : idResult?.error
+        ? 'error'
+        : 'idle'
+
   const inputStyle: React.CSSProperties = {
     background: 'var(--surface-2)', border: '1px solid var(--border-2)',
     borderRadius: '2px', padding: '11px 14px', fontSize: '13px',
@@ -375,7 +391,7 @@ export default function Home() {
       <nav style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(7,9,11,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <LogoMark size={26} />
+            <Boost state={boostState} size={26} />
             <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '-0.02em' }}>NeedBoost</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -557,13 +573,9 @@ export default function Home() {
 
           {/* Player header */}
           <div className="slide-in" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '40px', paddingBottom: '24px', borderBottom: '1px solid var(--border)' }}>
+            <Boost state={boostState} size={48} />
             {searchedPlayer?.avatarUrl && (
               <img src={searchedPlayer.avatarUrl} alt="" style={{ width: '44px', height: '44px', borderRadius: '2px', border: '1px solid var(--border-2)', flexShrink: 0 }} />
-            )}
-            {!searchedPlayer?.avatarUrl && (
-              <div style={{ width: '44px', height: '44px', borderRadius: '2px', background: 'var(--surface-2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <LogoMark size={20} />
-              </div>
             )}
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -610,7 +622,9 @@ export default function Home() {
 
           {/* ── What to practice tonight ── */}
           {practice && (
-            <div className="practice-section" style={{ padding: '20px 20px 20px 26px', marginBottom: '40px' }}>
+            <div className="practice-section" style={{ padding: '20px 20px 20px 26px', marginBottom: '40px' }}
+              onMouseEnter={() => setHighlightedCard(-1)}
+              onMouseLeave={() => setHighlightedCard(null)}>
               <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: '#FF5C1A', textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: '8px' }}>
                 // What to practice tonight
               </p>
@@ -629,7 +643,7 @@ export default function Home() {
                 <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {sorted.map((tip, i) => <CoachingCard key={i} tip={tip} index={i} />)}
+                {sorted.map((tip, i) => <CoachingCard key={i} tip={tip} index={i} onHover={setHighlightedCard} />)}
               </div>
             </div>
 
