@@ -4,8 +4,8 @@ import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'NeedBost — Rocket League Coaching',
-  description: 'Analyze your last 10 replays and get honest, specific feedback on what is actually holding you back.',
+  title: 'NeedBoost — Rocket League Coaching',
+  description: 'NeedBoost analyzes your Rocket League replays and tells you exactly what to practice tonight. Not statistics. Coaching.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,16 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --pitch:      #080A0C;
-  --surface:    #0F1215;
-  --surface-2:  #151920;
-  --border:     rgba(255,255,255,0.06);
-  --border-2:   rgba(255,255,255,0.10);
+  /* Core palette */
+  --pitch:      #07090B;
+  --surface:    #0C0F12;
+  --surface-2:  #111418;
+  --surface-3:  #161B20;
+  --border:     rgba(255,255,255,0.055);
+  --border-2:   rgba(255,255,255,0.09);
+  --border-3:   rgba(255,255,255,0.14);
   --chalk:      #E8EBF0;
-  --muted:      #4A5060;
-  --muted-2:    #1E2530;
+  --chalk-2:    #B8BCC8;
+  --muted:      #525866;
+  --muted-2:    #1C2230;
   --velocity:   #FF5C1A;
-  --velocity-dim: rgba(255,92,26,0.12);
+  --velocity-2: rgba(255,92,26,0.15);
+  --velocity-3: rgba(255,92,26,0.08);
   --blue:       #3B8BF5;
   --green:      #22C97A;
   --amber:      #F5A623;
@@ -23,40 +28,110 @@ html { scroll-behavior: smooth; }
 body {
   background: var(--pitch);
   color: var(--chalk);
-  font-family: '__GeistSans_Fallback', 'Geist', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-::-webkit-scrollbar { width: 4px; }
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: var(--pitch); }
 ::-webkit-scrollbar-thumb { background: var(--muted-2); border-radius: 2px; }
 
+/* ── Telemetry grid background ── */
+.tele-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── Corner cut utility ── */
+.corner-cut {
+  clip-path: polygon(14px 0%, 100% 0%, 100% 100%, 0% 100%, 0% 14px);
+}
+.corner-cut-sm {
+  clip-path: polygon(8px 0%, 100% 0%, 100% 100%, 0% 100%, 0% 8px);
+}
+
+/* ── Coaching card — the signature element ── */
+.coaching-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+.coaching-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+}
+.coaching-card.critical::before { background: var(--red); }
+.coaching-card.warning::before  { background: var(--amber); }
+.coaching-card.good::before     { background: var(--green); }
+
+/* ── Status pulse ── */
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.status-dot { animation: statusPulse 2s ease-in-out infinite; }
+
+/* ── Boost dot on logo ── */
 @keyframes boostPulse {
-  0%, 100% { opacity: 1;   transform: scale(1); }
-  50%       { opacity: 0.5; transform: scale(0.8); }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
 }
-.boost-dot { animation: boostPulse 2.4s ease-in-out infinite; }
+.boost-dot { animation: boostPulse 2.6s ease-in-out infinite; }
 
+/* ── Fade-up stagger ── */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.fade-up   { animation: fadeUp 0.45s ease both; }
-.fade-up-1 { animation: fadeUp 0.45s 0.06s ease both; }
-.fade-up-2 { animation: fadeUp 0.45s 0.12s ease both; }
-.fade-up-3 { animation: fadeUp 0.45s 0.18s ease both; }
-.fade-up-4 { animation: fadeUp 0.45s 0.24s ease both; }
+.fade-up   { animation: fadeUp 0.5s ease both; }
+.fade-up-1 { animation: fadeUp 0.5s 0.07s ease both; }
+.fade-up-2 { animation: fadeUp 0.5s 0.14s ease both; }
+.fade-up-3 { animation: fadeUp 0.5s 0.21s ease both; }
+.fade-up-4 { animation: fadeUp 0.5s 0.28s ease both; }
 
-@keyframes countUp {
-  from { opacity: 0; transform: translateY(5px); }
+/* ── Stat value entry ── */
+@keyframes statEntry {
+  from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.stat-value { animation: countUp 0.35s ease both; }
+.stat-value { animation: statEntry 0.4s ease both; }
 
+/* ── Slide in from left ── */
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(-6px); }
+  from { opacity: 0; transform: translateX(-8px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-.slide-in { animation: slideIn 0.3s ease both; }
+.slide-in { animation: slideIn 0.35s ease both; }
+
+/* ── Practice section ── */
+.practice-section {
+  background: linear-gradient(135deg, rgba(255,92,26,0.06) 0%, rgba(255,92,26,0.02) 100%);
+  border: 1px solid rgba(255,92,26,0.18);
+  border-radius: 2px;
+  position: relative;
+}
+.practice-section::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--velocity);
+}
+
+/* ── Sample hero card animation ── */
+@keyframes heroCardFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-4px); }
+}
+.hero-card-float { animation: heroCardFloat 4s ease-in-out infinite; }
+.hero-card-float-delay { animation: heroCardFloat 4s 1.3s ease-in-out infinite; }

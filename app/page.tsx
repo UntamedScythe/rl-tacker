@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { generateAdvice, type Stats, type Tip, type Teammate } from '@/lib/advice'
+import { useState, useRef } from 'react'
+import { generateAdvice, getPracticeTonight, type Stats, type Tip, type Teammate } from '@/lib/advice'
 import RadarChartComponent from '@/components/RadarChartComponent'
 import FieldZoneChart from '@/components/FieldZoneChart'
 
@@ -50,94 +50,39 @@ const RANK_NAMES: Record<number, { name: string; color: string }> = {
   22: { name: 'Supersonic Legend',  color: '#ff9e00' },
 }
 
-const STAT_GROUPS = (stats: Stats) => [
-  {
-    label: 'Offense', color: '#FF5C1A',
-    items: [
-      { label: 'Goals / game',   value: stats.goalsPerGame   },
-      { label: 'Assists / game', value: stats.assistsPerGame },
-      { label: 'Shots / game',   value: stats.shotsPerGame   },
-      { label: 'Shot %',         value: `${stats.shotAccuracy}%` },
-    ],
-  },
-  {
-    label: 'Defense', color: '#3B8BF5',
-    items: [
-      { label: 'Saves / game',   value: stats.savesPerGame       },
-      { label: 'Defensive %',    value: `${stats.defensivePct}%` },
-      { label: 'Demos taken',    value: stats.demosTakenPerGame  },
-      { label: 'Avg score',      value: stats.avgScore           },
-    ],
-  },
-  {
-    label: 'Boost', color: '#F5A623',
-    items: [
-      { label: 'Avg boost',    value: stats.avgBoost             },
-      { label: 'Stolen',       value: stats.boostStolenPerGame   },
-      { label: 'Supersonic %', value: `${stats.supersonicPct}%` },
-      { label: 'Slow %',       value: `${stats.slowPct}%`       },
-    ],
-  },
-  {
-    label: 'Positioning', color: '#22C97A',
-    items: [
-      { label: 'Offensive %',  value: `${stats.offensivePct}%`    },
-      { label: 'Neutral %',    value: `${stats.neutralPct}%`      },
-      { label: 'Demos given',  value: stats.demosInflictedPerGame  },
-      { label: 'Big pads',     value: stats.bigPadsPerGame         },
-    ],
-  },
-]
+// ─── Sample data for demo mode ────────────────────────────────────────────────
 
-const SEVERITY: Record<Tip['severity'], { dot: string; badge: string; border: string }> = {
-  critical: { dot: '#F54B4B', badge: 'rgba(245,75,75,0.12)',  border: 'rgba(245,75,75,0.25)'  },
-  warning:  { dot: '#F5A623', badge: 'rgba(245,166,35,0.12)', border: 'rgba(245,166,35,0.25)' },
-  good:     { dot: '#22C97A', badge: 'rgba(34,201,122,0.12)', border: 'rgba(34,201,122,0.25)' },
+const SAMPLE_STATS: Stats = {
+  gamesAnalyzed: 10, goalsPerGame: 1.4, assistsPerGame: 0.8,
+  savesPerGame: 1.2, shotsPerGame: 4.1, shotAccuracy: 34.1,
+  avgScore: 412, avgBoost: 52, boostStolenPerGame: 98, bigPadsPerGame: 2.3,
+  avgSpeed: 1340, supersonicPct: 13.2, slowPct: 41.8,
+  offensivePct: 38.4, defensivePct: 24.1, neutralPct: 37.5,
+  demosInflictedPerGame: 0.6, demosTakenPerGame: 0.4,
+  playerName: 'SamplePlayer',
+  playerRank: { tier: 14 },
+  topTeammates: [],
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type MatchType = 'exact' | 'normalized' | 'starts-with' | 'substring'
-
-type PlayerCandidate = {
-  name:        string
-  platform:    string
-  id:          string
-  replayCount: number
-  matchType:   MatchType
-}
-
-type DiscoverResponse = {
-  candidates:  PlayerCandidate[]
-  searchName:  string
-  cached:      boolean
-  error?:      string
-  errorCode?:  string
-}
-
-type ApiResponse = {
-  cached?: boolean
-  stats?: Stats & {
-    playerRank?: { tier?: number; division?: number; name?: string }
-    playerName?: string
-  }
-  replayCount?: number
-  error?: string
-}
-
-type UploadResponse = {
-  players?: { id: string; platform: string; name: string; stats: object }[]
-  error?: string
-}
-
+type PlayerCandidate = { name: string; platform: string; id: string; replayCount: number; matchType: MatchType }
+type DiscoverResponse = { candidates: PlayerCandidate[]; searchName: string; cached: boolean; error?: string; errorCode?: string }
+type ApiResponse = { stats?: Stats; replayCount?: number; error?: string; cached?: boolean }
+type UploadResponse = { players?: { id: string; platform: string; name: string; stats: object }[]; error?: string }
 type UploadPlayer = { id: string; platform: string; name: string; stats: object }
+
+function displayName(name: string): string {
+  if (!name || /^\*+$/.test(name.trim())) return 'Hidden Player'
+  return name
+}
 
 function singleReplayToStats(raw: Record<string, Record<string, number>>): Stats {
   const c = raw?.core ?? {}, b = raw?.boost ?? {}, m = raw?.movement ?? {}
   const pos = raw?.positioning ?? {}, d = raw?.demo ?? {}
   return {
-    gamesAnalyzed: 1,
-    goalsPerGame: c.goals ?? 0, assistsPerGame: c.assists ?? 0,
+    gamesAnalyzed: 1, goalsPerGame: c.goals ?? 0, assistsPerGame: c.assists ?? 0,
     savesPerGame: c.saves ?? 0, shotsPerGame: c.shots ?? 0,
     shotAccuracy: c.shots > 0 ? +((c.goals / c.shots) * 100).toFixed(1) : 0,
     avgScore: c.score ?? 0, avgBoost: b.avg_amount ?? 0,
@@ -153,227 +98,239 @@ function singleReplayToStats(raw: Record<string, Record<string, number>>): Stats
 
 function LogoMark({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M14 2L24.39 8V20L14 26L3.61 20V8L14 2Z" fill="#FF5C1A" fillOpacity="0.15" stroke="#FF5C1A" strokeWidth="1.2" />
-      <path d="M9 19L17 9" stroke="#FF5C1A" strokeWidth="2" strokeLinecap="round"/>
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
+      <path d="M14 2L24.39 8V20L14 26L3.61 20V8L14 2Z" fill="#FF5C1A" fillOpacity="0.12" stroke="#FF5C1A" strokeWidth="1.2"/>
+      <path d="M9 19L17 9" stroke="#FF5C1A" strokeWidth="2.2" strokeLinecap="round"/>
       <circle className="boost-dot" cx="17.5" cy="9.5" r="2.5" fill="#FF5C1A"/>
-      <path d="M7 14H11" stroke="#FF5C1A" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.5"/>
-      <path d="M7 17H10" stroke="#FF5C1A" strokeWidth="1" strokeLinecap="round" strokeOpacity="0.3"/>
+      <path d="M7 14H11" stroke="#FF5C1A" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.45"/>
+      <path d="M7 17H10" stroke="#FF5C1A" strokeWidth="1" strokeLinecap="round" strokeOpacity="0.25"/>
     </svg>
   )
 }
 
-// ─── Stat Card with count-up ──────────────────────────────────────────────────
+// ─── Coaching Card ────────────────────────────────────────────────────────────
+// The signature visual element of NeedBoost
 
-function StatCard({ label, value, color, delay }: { label: string; value: string | number; color: string; delay: number }) {
+function CoachingCard({ tip, index }: { tip: Tip; index: number }) {
+  const [expanded, setExpanded] = useState(index === 0)
+  const sev = tip.severity
+
   return (
-    <div className="stat-value" style={{ animationDelay: `${delay}ms` }}>
-      <p style={{ color: 'var(--muted)', fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-geist-mono)', marginBottom: '4px' }}>
-        {label}
-      </p>
-      <p style={{ fontSize: '1.55rem', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--chalk)', lineHeight: 1 }}>
-        {value}
-        <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: color, marginLeft: '6px', verticalAlign: 'middle', opacity: 0.8 }} />
-      </p>
+    <div
+      className={`coaching-card ${sev}`}
+      style={{ animationDelay: `${index * 60}ms` }}
+    >
+      <div
+        style={{ padding: '16px 20px 16px 24px', cursor: 'pointer' }}
+        onClick={() => setExpanded(e => !e)}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <span style={{
+                fontFamily: 'var(--font-geist-mono)',
+                fontSize: '10px', fontWeight: 600,
+                padding: '2px 7px', borderRadius: '3px',
+                background: sev === 'critical' ? 'rgba(245,75,75,0.12)' : sev === 'warning' ? 'rgba(245,166,35,0.12)' : 'rgba(34,201,122,0.12)',
+                color: sev === 'critical' ? '#F54B4B' : sev === 'warning' ? '#F5A623' : '#22C97A',
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+              }}>{sev}</span>
+              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{tip.category}</span>
+            </div>
+            <p style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.3, color: 'var(--chalk)' }}>{tip.title}</p>
+          </div>
+          <span style={{ color: 'var(--muted)', fontSize: '12px', flexShrink: 0, marginTop: '2px', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: '0 20px 18px 24px', borderTop: '1px solid var(--border)' }}>
+          {/* Observation */}
+          <p style={{ fontSize: '13px', color: 'var(--chalk-2)', lineHeight: 1.75, marginTop: '14px', marginBottom: '10px' }}>
+            {tip.observation}
+          </p>
+
+          {/* Evidence */}
+          <div style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: 'var(--muted)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '3px', padding: '6px 10px', marginBottom: '14px' }}>
+            {tip.evidence}
+          </div>
+
+          {/* Drill */}
+          <div style={{ background: 'rgba(255,92,26,0.06)', border: '1px solid rgba(255,92,26,0.14)', borderRadius: '3px', padding: '10px 14px' }}>
+            <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: '#FF5C1A', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '5px' }}>Practice tonight</p>
+            <p style={{ fontSize: '13px', color: 'var(--chalk-2)', lineHeight: 1.65 }}>{tip.drill}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-// ─── Loading Progress ─────────────────────────────────────────────────────────
+// ─── Progress bar ─────────────────────────────────────────────────────────────
 
-function LoadingReplays({ pct }: { pct: number }) {
+function AnalysisProgress({ pct }: { pct: number }) {
+  const label = pct < 25 ? 'Connecting to Ballchasing…'
+    : pct < 55 ? 'Pulling your replays…'
+    : pct < 80 ? 'Reading your habits…'
+    : 'Almost ready…'
+
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px 24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <p style={{ fontSize: '13px', color: 'var(--chalk)' }}>
-          {pct < 30 ? 'Connecting to Ballchasing…'
-            : pct < 60 ? 'Fetching replays…'
-            : pct < 90 ? 'Analyzing your games…'
-            : 'Almost done…'}
-        </p>
-        <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '12px', color: '#FF5C1A' }}>
-          {Math.round(pct)}%
-        </p>
+    <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', padding: '16px 20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="status-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#FF5C1A' }} />
+          <p style={{ fontSize: '12px', color: 'var(--chalk-2)' }}>{label}</p>
+        </div>
+        <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: '#FF5C1A' }}>{Math.round(pct)}%</p>
       </div>
-      <div style={{ height: '3px', background: 'var(--muted-2)', borderRadius: '2px', overflow: 'hidden' }}>
-        <div style={{
-          height: '100%',
-          width: `${pct}%`,
-          background: 'linear-gradient(90deg, #FF5C1A, #FF8C5A)',
-          borderRadius: '2px',
-          transition: 'width 0.15s ease-out',
-        }} />
+      <div style={{ height: '2px', background: 'var(--muted-2)', borderRadius: '1px', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, #FF5C1A, #FF8C5A)', borderRadius: '1px', transition: 'width 0.15s ease-out' }} />
       </div>
-      <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '8px' }}>
-        Usually takes 3–5 seconds
-      </p>
     </div>
   )
 }
 
-// ─── Shared input style ───────────────────────────────────────────────────────
+// ─── Hero Preview Cards ───────────────────────────────────────────────────────
 
-const inputStyle: React.CSSProperties = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border-2)',
-  borderRadius: '10px',
-  padding: '11px 16px',
-  fontSize: '13px',
-  color: 'var(--chalk)',
-  fontFamily: 'var(--font-geist-mono)',
-  outline: 'none',
-  width: '100%',
+function HeroPreview() {
+  return (
+    <div style={{ position: 'relative', height: '320px' }}>
+      {/* Background coaching card */}
+      <div className="hero-card-float-delay" style={{ position: 'absolute', right: 0, top: '20px', width: '300px', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', overflow: 'hidden', opacity: 0.7 }}>
+        <div style={{ width: '3px', position: 'absolute', left: 0, top: 0, bottom: 0, background: '#F5A623' }} />
+        <div style={{ padding: '14px 16px 14px 20px' }}>
+          <div style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: '#F5A623', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Warning · Positioning</div>
+          <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--chalk)', marginBottom: '6px' }}>You&apos;re arriving late to your own plays</p>
+          <p style={{ fontSize: '11px', color: 'var(--muted)', lineHeight: 1.6 }}>Low supersonic time means you&apos;re a half-second behind where you need to be.</p>
+        </div>
+      </div>
+
+      {/* Foreground coaching card */}
+      <div className="hero-card-float" style={{ position: 'absolute', left: 0, top: '60px', width: '320px', background: 'var(--surface-2)', border: '1px solid var(--border-3)', borderRadius: '2px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
+        <div style={{ width: '3px', position: 'absolute', left: 0, top: 0, bottom: 0, background: '#F54B4B' }} />
+        <div style={{ padding: '16px 18px 16px 22px' }}>
+          <div style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: '#F54B4B', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Critical · Boost</div>
+          <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--chalk)', marginBottom: '8px', letterSpacing: '-0.01em' }}>You&apos;re running on empty</p>
+          <p style={{ fontSize: '12px', color: 'var(--chalk-2)', lineHeight: 1.65, marginBottom: '12px' }}>You&apos;re going into 50/50s with near-zero boost. It&apos;s not a mechanics issue — it&apos;s a routing habit.</p>
+          <div style={{ background: 'rgba(255,92,26,0.07)', border: '1px solid rgba(255,92,26,0.15)', borderRadius: '3px', padding: '8px 12px' }}>
+            <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: '#FF5C1A', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '3px' }}>Practice tonight</p>
+            <p style={{ fontSize: '11px', color: 'var(--chalk-2)' }}>Collect every small pad within 2 car lengths of your rotation path.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Mini stat strip */}
+      <div style={{ position: 'absolute', bottom: 0, left: '10px', right: '10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '2px', padding: '10px 16px', display: 'flex', gap: '20px' }}>
+        {[
+          { label: 'Avg Boost', value: '52', color: '#F5A623' },
+          { label: 'Shot %',    value: '34%', color: '#FF5C1A' },
+          { label: 'Offensive %', value: '38%', color: '#F54B4B' },
+        ].map(s => (
+          <div key={s.label}>
+            <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>{s.label}</p>
+            <p style={{ fontSize: '16px', fontWeight: 700, color: s.color, letterSpacing: '-0.02em', lineHeight: 1 }}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
-const selectStyle: React.CSSProperties = {
-  background: 'var(--surface)',
-  border: '1px solid var(--border-2)',
-  borderRadius: '10px',
-  padding: '10px 12px',
-  fontSize: '12px',
-  color: 'var(--muted)',
-  fontFamily: 'var(--font-geist-mono)',
-  outline: 'none',
-}
-
-const primaryBtn: React.CSSProperties = {
-  background: '#FF5C1A',
-  color: '#fff',
-  border: 'none',
-  borderRadius: '10px',
-  padding: '10px 20px',
-  fontSize: '13px',
-  fontWeight: 600,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-  transition: 'opacity 0.15s',
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-
-function displayName(name: string): string {
-  if (!name || /^\*+$/.test(name)) return 'Hidden Player'
-  return name
-}
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
-
-  // Tab
-  const [tab, setTab] = useState<'name' | 'id' | 'upload'>('name')
-
-  // Player ID search
+  const [tab, setTab]             = useState<'name' | 'id' | 'upload'>('name')
   const [playerId, setPlayerId]   = useState('')
   const [platform, setPlatform]   = useState('steam')
   const [playlist, setPlaylist]   = useState('')
   const [idLoading, setIdLoading] = useState(false)
-  const [loadProgress, setLoadProgress] = useState(0)
+  const [loadPct, setLoadPct]     = useState(0)
   const [idResult, setIdResult]   = useState<ApiResponse | null>(null)
-  const [autoSearch, setAutoSearch] = useState(false)
   const [searchedPlayer, setSearchedPlayer] = useState<{ name: string; avatarUrl?: string; id: string; platform: string } | null>(null)
+  const [autoSearch, setAutoSearch] = useState(false)
 
-  // Name discovery
   const [nameQuery, setNameQuery]     = useState('')
   const [nameLoading, setNameLoading] = useState(false)
   const [nameResult, setNameResult]   = useState<DiscoverResponse | null>(null)
 
-  // Upload
-  const [dragOver, setDragOver]           = useState(false)
-  const [uploadLoading, setUploadLoading] = useState(false)
-  const [uploadResult, setUploadResult]   = useState<UploadResponse | null>(null)
+  const [dragOver, setDragOver]             = useState(false)
+  const [uploadLoading, setUploadLoading]   = useState(false)
+  const [uploadResult, setUploadResult]     = useState<UploadResponse | null>(null)
   const [selectedPlayer, setSelectedPlayer] = useState<UploadPlayer | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const resultsRef = useRef<HTMLDivElement>(null)
 
-  // ── Auto-search on teammate click ──────────────────────────────────────────
-  useEffect(() => {
-    if (!autoSearch || !playerId.trim()) return
-    setAutoSearch(false)
-    setIdResult(null)
-    setPlaylist('')
-    runSearch(playerId.trim(), platform, '')
-  }, [autoSearch, playerId, platform])
+  // Demo mode
+  const [demoMode, setDemoMode] = useState(false)
 
-  // ── runSearch ──────────────────────────────────────────────────────────────
+  // Auto-search on teammate click
+  const autoRef = useRef(false)
+  if (autoSearch && !autoRef.current) {
+    autoRef.current = true
+    setTimeout(() => {
+      autoRef.current = false
+      setAutoSearch(false)
+      if (playerId.trim()) runSearch(playerId.trim(), platform, '')
+    }, 0)
+  }
+
   async function runSearch(id: string, plat: string, pl: string, refresh = false) {
+    setDemoMode(false)
     setIdLoading(true)
     setIdResult(null)
     setSearchedPlayer(null)
-    
+    setLoadPct(0)
 
-    setLoadProgress(0)
     let pct = 0
     const timer = setInterval(() => {
-      const pull = pct < 60 ? 0.10 : pct < 80 ? 0.04 : 0.008
+      const pull = pct < 55 ? 0.09 : pct < 78 ? 0.04 : 0.007
       pct = Math.min(pct + (95 - pct) * pull, 94)
-      setLoadProgress(pct)
+      setLoadPct(pct)
     }, 150)
 
-    const playlistParam = pl ? `&playlist=${encodeURIComponent(pl)}` : ''
-    const refreshParam = refresh ? '&refresh=true' : ''
-    const data: ApiResponse = await fetch(
-      `/api/stats?playerId=${encodeURIComponent(id)}&platform=${plat}${playlistParam}${refreshParam}`
-    ).then(r => r.json())
+    const pp = pl ? `&playlist=${encodeURIComponent(pl)}` : ''
+    const rr = refresh ? '&refresh=true' : ''
+    const data: ApiResponse = await fetch(`/api/stats?playerId=${encodeURIComponent(id)}&platform=${plat}${pp}${rr}`).then(r => r.json())
 
     clearInterval(timer)
-
-    if (data.cached) {
-      // Cached — snap straight to done, no progress bar delay
-      setLoadProgress(100)
-    } else {
-      setLoadProgress(100)
-      await new Promise(r => setTimeout(r, 250))
-    }
+    setLoadPct(100)
+    if (!data.cached) await new Promise(r => setTimeout(r, 220))
     setIdResult(data)
+    setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
 
-    const replayName: string | undefined = data?.stats?.playerName
-    let displayName = replayName ?? id
+    let displayN = data?.stats?.playerName ?? id
     let avatarUrl: string | null = null
-
     if (plat === 'steam') {
       try {
-        const nameParam = replayName ? `&name=${encodeURIComponent(replayName)}` : ''
-        const profile = await fetch(`/api/steamprofile?steamId=${encodeURIComponent(id)}${nameParam}`).then(r => r.json())
-        if (profile?.name) displayName = profile.name
+        const np = data?.stats?.playerName ? `&name=${encodeURIComponent(data.stats.playerName)}` : ''
+        const profile = await fetch(`/api/steamprofile?steamId=${encodeURIComponent(id)}${np}`).then(r => r.json())
+        if (profile?.name) displayN = profile.name
         if (profile?.avatarUrl) avatarUrl = profile.avatarUrl
       } catch { /* silent */ }
     }
-
-    setSearchedPlayer({ name: displayName, avatarUrl: avatarUrl ?? undefined, id, platform: plat })
+    setSearchedPlayer({ name: displayN, avatarUrl: avatarUrl ?? undefined, id, platform: plat })
     setIdLoading(false)
   }
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     if (!playerId.trim()) return
-    runSearch(playerId.trim(), platform, playlist, false)
+    runSearch(playerId.trim(), platform, playlist)
   }
 
-  // ── Name discovery ─────────────────────────────────────────────────────────
   async function handleNameSearch(e: React.FormEvent) {
     e.preventDefault()
     const q = nameQuery.trim()
     if (q.length < 2) return
-    setNameLoading(true)
-    setNameResult(null)
-    const res = await fetch('/api/discover', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: q }),
-    })
-    const data: DiscoverResponse = await res.json()
-    setNameResult(data)
-    setNameLoading(false)
+    setNameLoading(true); setNameResult(null)
+    const data: DiscoverResponse = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: q }) }).then(r => r.json())
+    setNameResult(data); setNameLoading(false)
   }
 
   function selectCandidate(c: PlayerCandidate) {
-    setTab('id')
-    setPlayerId(c.id)
-    setPlatform(c.platform)
-    setNameResult(null)
-    setAutoSearch(true)
+    setTab('id'); setPlayerId(c.id); setPlatform(c.platform); setNameResult(null); setAutoSearch(true)
   }
 
-  // ── Upload ─────────────────────────────────────────────────────────────────
   async function handleUpload(file: File) {
     if (!file.name.endsWith('.replay')) { setUploadResult({ error: 'Please select a .replay file.' }); return }
     setUploadLoading(true); setUploadResult(null); setSelectedPlayer(null)
@@ -382,99 +339,87 @@ export default function Home() {
     setUploadResult(data); setUploadLoading(false)
   }
 
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault(); setDragOver(false)
-    const file = e.dataTransfer.files?.[0]; if (file) handleUpload(file)
+  function loadDemo() {
+    setDemoMode(true)
+    setIdResult(null)
+    setSearchedPlayer({ name: 'SamplePlayer', id: 'demo', platform: 'steam' })
+    setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
   }
 
-  // ── Derived ────────────────────────────────────────────────────────────────
-  const displayStats: Stats | null =
-    tab === 'id' ? (idResult?.stats ?? null)
-    : tab === 'upload' && selectedPlayer
-    ? singleReplayToStats(selectedPlayer.stats as Record<string, Record<string, number>>)
+  const activeStats: Stats | null = demoMode ? SAMPLE_STATS
+    : tab === 'id' ? (idResult?.stats ?? null)
+    : tab === 'upload' && selectedPlayer ? singleReplayToStats(selectedPlayer.stats as Record<string, Record<string, number>>)
     : null
 
-  const tips = displayStats ? generateAdvice(displayStats) : []
-  const sorted = [...tips].sort((a, b) =>
-    ({ critical: 0, warning: 1, good: 2 }[a.severity]) - ({ critical: 0, warning: 1, good: 2 }[b.severity])
-  )
-  const rankInfo = idResult?.stats?.playerRank?.tier != null
-    ? (RANK_NAMES[idResult.stats.playerRank.tier] ?? null) : null
+  const tips = activeStats ? generateAdvice(activeStats) : []
+  const sorted = [...tips].sort((a, b) => ({ critical: 0, warning: 1, good: 2 }[a.severity]) - ({ critical: 0, warning: 1, good: 2 }[b.severity]))
+  const practice = getPracticeTonight(sorted)
+  const rankInfo = (demoMode ? SAMPLE_STATS : idResult?.stats)?.playerRank?.tier != null
+    ? (RANK_NAMES[(demoMode ? SAMPLE_STATS : idResult!.stats!)!.playerRank!.tier!] ?? null) : null
 
-  const MATCH_COLORS: Record<MatchType, string> = {
-    exact:          '#22C97A',
-    normalized:     '#22C97A',
-    'starts-with':  '#F5A623',
-    substring:      '#4A5060',
+  const inputStyle: React.CSSProperties = {
+    background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+    borderRadius: '2px', padding: '11px 14px', fontSize: '13px',
+    color: 'var(--chalk)', fontFamily: 'var(--font-geist-mono)', outline: 'none', width: '100%',
+  }
+  const selectStyle: React.CSSProperties = {
+    background: 'var(--surface-2)', border: '1px solid var(--border-2)',
+    borderRadius: '2px', padding: '10px 12px', fontSize: '12px',
+    color: 'var(--muted)', fontFamily: 'var(--font-geist-mono)', outline: 'none',
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <main style={{ minHeight: '100vh', background: 'var(--pitch)', color: 'var(--chalk)' }}>
 
-      {/* Nav */}
-      <nav style={{
-        position: 'sticky', top: 0, zIndex: 50,
-        background: 'rgba(8,10,12,0.88)',
-        backdropFilter: 'blur(14px)',
-        borderBottom: '1px solid var(--border)',
-      }}>
-        <div style={{ maxWidth: '880px', margin: '0 auto', padding: '0 24px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* ── Nav ── */}
+      <nav style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(7,9,11,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '0 24px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <LogoMark size={28} />
-            <span style={{ fontWeight: 700, fontSize: '15px', letterSpacing: '-0.02em' }}>NeedBoost</span>
+            <LogoMark size={26} />
+            <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '-0.02em' }}>NeedBoost</span>
           </div>
-          <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-            Replay Analysis
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div className="status-dot" style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#22C97A' }} />
+              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Analysis Ready</span>
+            </div>
+            <button onClick={loadDemo} style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', background: 'none', border: '1px solid var(--border-2)', borderRadius: '2px', padding: '4px 10px', cursor: 'pointer', letterSpacing: '0.06em', textTransform: 'uppercase', transition: 'color 0.15s' }}>
+              View Sample
+            </button>
+          </div>
         </div>
       </nav>
 
-      {/* Hero */}
-      <div style={{ maxWidth: '880px', margin: '0 auto', padding: '0 24px' }}>
-        <section style={{ padding: '72px 0 56px' }}>
-          <div style={{ maxWidth: '540px' }}>
+      {/* ── Hero ── */}
+      <div className="tele-grid" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '64px 24px 72px', display: 'grid', gridTemplateColumns: '1fr 380px', gap: '64px', alignItems: 'center' }}>
 
-            <p className="fade-up" style={{
-              fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: '#FF5C1A',
-              letterSpacing: '0.14em', textTransform: 'uppercase',
-              marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px',
-            }}>
-              <span style={{ display: 'inline-block', width: '24px', height: '1px', background: '#FF5C1A' }} />
-              Honest feedback from your own replays
+          {/* Left — copy + search */}
+          <div>
+            <p className="fade-up" style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: '#FF5C1A', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ display: 'inline-block', width: '20px', height: '1px', background: '#FF5C1A' }} />
+              Rocket League Coaching
             </p>
 
-            <h1 className="fade-up-1" style={{
-              fontSize: 'clamp(2.2rem, 5vw, 3.4rem)', fontWeight: 700,
-              letterSpacing: '-0.04em', lineHeight: 1.05, marginBottom: '20px',
-            }}>
-              Stop guessing<br />
-              <span style={{ color: '#FF5C1A' }}>what&apos;s holding</span><br />
-              you back.
+            <h1 className="fade-up-1" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1.0, marginBottom: '18px' }}>
+              Your replays know<br />
+              <span style={{ color: '#FF5C1A' }}>what you don&apos;t.</span>
             </h1>
 
-            <p className="fade-up-2" style={{
-              fontSize: '15px', color: 'var(--muted)', lineHeight: 1.75,
-              marginBottom: '36px', maxWidth: '420px',
-            }}>
-              Drop your display name, Ballchasing ID, or a replay. We analyze your last 10 games and tell you exactly what a Diamond player would fix first.
+            <p className="fade-up-2" style={{ fontSize: '14px', color: 'var(--chalk-2)', lineHeight: 1.8, marginBottom: '32px', maxWidth: '400px' }}>
+              NeedBoost reads your last 10 games, identifies the habits holding you back, and tells you exactly what to practice tonight. Not statistics. Coaching.
             </p>
 
-            {/* Tab switcher */}
-            <div className="fade-up-3" style={{
-              display: 'inline-flex', flexWrap: 'wrap', gap: '3px',
-              background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: '12px', padding: '4px', marginBottom: '24px',
-            }}>
+            {/* Tab row */}
+            <div className="fade-up-3" style={{ display: 'flex', gap: '2px', marginBottom: '16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '3px', padding: '3px', width: 'fit-content' }}>
               {([
-                { key: 'name',   label: 'Find by Name'  },
                 { key: 'id',     label: 'Player ID'     },
-                { key: 'upload', label: 'Upload Replay' },
+                { key: 'name',   label: 'Find by Name'  },
+                { key: 'upload', label: 'Upload Replay'  },
               ] as { key: 'name' | 'id' | 'upload'; label: string }[]).map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
-                  padding: '8px 16px', borderRadius: '9px', fontSize: '13px',
-                  fontWeight: 500, border: 'none', cursor: 'pointer',
-                  transition: 'all 0.15s', whiteSpace: 'nowrap',
+                  padding: '7px 14px', borderRadius: '2px', fontSize: '12px', fontWeight: 500,
+                  border: 'none', cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
                   background: tab === t.key ? '#FF5C1A' : 'transparent',
                   color: tab === t.key ? '#fff' : 'var(--muted)',
                 }}>
@@ -483,337 +428,282 @@ export default function Home() {
               ))}
             </div>
 
-            {/* ── Find by Name ── */}
-            {tab === 'name' && (
-              <div className="fade-up-4" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <form onSubmit={handleNameSearch} style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text" value={nameQuery} onChange={e => setNameQuery(e.target.value)}
-                    placeholder="Your Rocket League display name"
-                    style={{ ...inputStyle, flex: 1 }}
-                  />
-                  <button type="submit" disabled={nameLoading || nameQuery.trim().length < 2}
-                    style={{ ...primaryBtn, opacity: nameLoading || nameQuery.trim().length < 2 ? 0.4 : 1, cursor: nameLoading || nameQuery.trim().length < 2 ? 'not-allowed' : 'pointer' }}>
-                    {nameLoading ? '…' : 'Search →'}
-                  </button>
-                </form>
-
-                <p style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                  Searches public replays on Ballchasing. If your name has no public replays, use Player ID instead.
-                </p>
-
-                {/* Error */}
-                {nameResult?.error && nameResult.candidates.length === 0 && (
-                  <div style={{ background: 'rgba(245,75,75,0.08)', border: '1px solid rgba(245,75,75,0.2)', borderRadius: '10px', padding: '12px 16px', fontSize: '13px', color: '#F54B4B' }}>
-                    {nameResult.error}
-                  </div>
-                )}
-
-                {/* Too many warning */}
-                {nameResult?.errorCode === 'TOO_MANY' && nameResult.candidates.length > 0 && (
-                  <div style={{ background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: '10px', padding: '12px 16px', fontSize: '12px', color: '#F5A623' }}>
-                    {nameResult.error}
-                  </div>
-                )}
-
-                {/* Candidate list */}
-                {nameResult && nameResult.candidates.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'center', marginBottom: '4px' }}>
-                      Select your account
-                    </p>
-                    {nameResult.candidates.map(c => {
-                      const color = MATCH_COLORS[c.matchType as MatchType] ?? '#4A5060'
-                      return (
-                        <button key={`${c.platform}:${c.id}`} onClick={() => selectCandidate(c)}
-                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px', cursor: 'pointer', color: 'var(--chalk)', textAlign: 'left', transition: 'border-color 0.15s' }}>
-                          <div>
-                            <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '3px' }}>{displayName(c.name)}</p>
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase' }}>{c.platform}</span>
-                              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)' }}>
-                                {c.id.length > 18 ? c.id.slice(0, 18) + '…' : c.id}
-                              </span>
-                              <span style={{ fontSize: '10px', color: 'var(--muted)' }}>{c.replayCount} replay{c.replayCount !== 1 ? 's' : ''}</span>
-                            </div>
-                          </div>
-                          <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: color + '18', color, border: `1px solid ${color}40`, flexShrink: 0, marginLeft: '12px' }}>
-                            {c.matchType}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {nameResult?.cached && (
-                  <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textAlign: 'center' }}>cached result</p>
-                )}
-              </div>
-            )}
-
             {/* ── Player ID ── */}
             {tab === 'id' && (
-              <div className="fade-up-4" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <form onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <input
-                    type="text" value={playerId} onChange={e => setPlayerId(e.target.value)}
-                    placeholder="Ballchasing player ID (e.g. 76561198201406534)"
-                    style={inputStyle}
-                  />
-                  <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="fade-up-4" style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '480px' }}>
+                <form onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <input type="text" value={playerId} onChange={e => setPlayerId(e.target.value)}
+                    placeholder="Ballchasing player ID" style={inputStyle} />
+                  <div style={{ display: 'flex', gap: '6px' }}>
                     <select value={platform} onChange={e => setPlatform(e.target.value)} style={{ ...selectStyle, width: '30%' }}>
-                      {PLATFORMS.map(p => <option key={p.value} value={p.value} style={{ background: '#0F1215' }}>{p.label}</option>)}
+                      {PLATFORMS.map(p => <option key={p.value} value={p.value} style={{ background: '#0C0F12' }}>{p.label}</option>)}
                     </select>
                     <select value={playlist} onChange={e => setPlaylist(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
-                      {PLAYLISTS.map(p => <option key={p.value} value={p.value} style={{ background: '#0F1215' }}>{p.label}</option>)}
+                      {PLAYLISTS.map(p => <option key={p.value} value={p.value} style={{ background: '#0C0F12' }}>{p.label}</option>)}
                     </select>
-                    <button type="submit" disabled={idLoading || !playerId.trim()}
-                      style={{ ...primaryBtn, opacity: idLoading || !playerId.trim() ? 0.4 : 1, cursor: idLoading || !playerId.trim() ? 'not-allowed' : 'pointer' }}>
-                      {idLoading ? '…' : 'Analyze →'}
+                    <button type="submit" disabled={idLoading || !playerId.trim()} style={{
+                      background: '#FF5C1A', color: '#fff', border: 'none', borderRadius: '2px',
+                      padding: '10px 18px', fontSize: '13px', fontWeight: 700,
+                      cursor: idLoading || !playerId.trim() ? 'not-allowed' : 'pointer',
+                      opacity: idLoading || !playerId.trim() ? 0.4 : 1,
+                      whiteSpace: 'nowrap', letterSpacing: '-0.01em',
+                    }}>
+                      {idLoading ? '…' : 'Start My Analysis →'}
                     </button>
                   </div>
                 </form>
-
-                {idLoading && <LoadingReplays pct={loadProgress} />}
-
+                {idLoading && <AnalysisProgress pct={loadPct} />}
                 {idResult?.error && (
-                  <div style={{ background: 'rgba(245,75,75,0.08)', border: '1px solid rgba(245,75,75,0.2)', borderRadius: '10px', padding: '12px 16px', fontSize: '13px', color: '#F54B4B' }}>
+                  <div style={{ background: 'rgba(245,75,75,0.08)', border: '1px solid rgba(245,75,75,0.18)', borderRadius: '2px', padding: '10px 14px', fontSize: '12px', color: '#F54B4B' }}>
                     {idResult.error}
                   </div>
                 )}
-
                 <p style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                  Find your ID on{' '}
-                  <a href="https://ballchasing.com" target="_blank" rel="noreferrer" style={{ color: '#FF5C1A', textDecoration: 'none' }}>ballchasing.com</a>
-                  {' '}→ search your name → copy ID from profile URL
+                  Find your ID on <a href="https://ballchasing.com" target="_blank" rel="noreferrer" style={{ color: '#FF5C1A', textDecoration: 'none' }}>ballchasing.com</a> → search your name → copy from profile URL
                 </p>
+              </div>
+            )}
+
+            {/* ── Find by Name ── */}
+            {tab === 'name' && (
+              <div className="fade-up-4" style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '480px' }}>
+                <form onSubmit={handleNameSearch} style={{ display: 'flex', gap: '6px' }}>
+                  <input type="text" value={nameQuery} onChange={e => setNameQuery(e.target.value)}
+                    placeholder="Your Rocket League display name"
+                    style={{ ...inputStyle, flex: 1 }} />
+                  <button type="submit" disabled={nameLoading || nameQuery.trim().length < 2} style={{
+                    background: '#FF5C1A', color: '#fff', border: 'none', borderRadius: '2px',
+                    padding: '10px 18px', fontSize: '13px', fontWeight: 700,
+                    cursor: nameLoading || nameQuery.trim().length < 2 ? 'not-allowed' : 'pointer',
+                    opacity: nameLoading || nameQuery.trim().length < 2 ? 0.4 : 1, whiteSpace: 'nowrap',
+                  }}>{nameLoading ? '…' : 'Search →'}</button>
+                </form>
+                <p style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                  Note: Ballchasing&apos;s name search only covers accounts that have personally uploaded replays. If no results appear, use Player ID.
+                </p>
+                {nameResult?.error && nameResult.candidates.length === 0 && (
+                  <div style={{ background: 'rgba(245,75,75,0.08)', border: '1px solid rgba(245,75,75,0.18)', borderRadius: '2px', padding: '10px 14px', fontSize: '12px', color: '#F54B4B' }}>{nameResult.error}</div>
+                )}
+                {nameResult && nameResult.candidates.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Select your account</p>
+                    {nameResult.candidates.map(c => (
+                      <button key={`${c.platform}:${c.id}`} onClick={() => selectCandidate(c)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', padding: '10px 14px', cursor: 'pointer', color: 'var(--chalk)', textAlign: 'left' }}>
+                        <div>
+                          <p style={{ fontSize: '13px', fontWeight: 600 }}>{displayName(c.name)}</p>
+                          <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>{c.platform} · {c.id.slice(0, 16)}… · {c.replayCount} replays</p>
+                        </div>
+                        <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Analyze →</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {/* ── Upload ── */}
             {tab === 'upload' && (
-              <div className="fade-up-4" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div
-                  onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={onDrop}
+              <div className="fade-up-4" style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '480px' }}>
+                <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)}
+                  onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) handleUpload(f) }}
                   onClick={() => fileRef.current?.click()}
-                  style={{
-                    border: `2px dashed ${dragOver ? '#FF5C1A' : 'var(--border-2)'}`,
-                    borderRadius: '12px', padding: '40px 24px', textAlign: 'center',
-                    cursor: 'pointer', transition: 'all 0.15s',
-                    background: dragOver ? 'rgba(255,92,26,0.04)' : 'var(--surface)',
-                  }}
-                >
-                  <input ref={fileRef} type="file" accept=".replay"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }}
-                    style={{ display: 'none' }}
-                  />
-                  {uploadLoading ? (
-                    <p style={{ fontSize: '13px', color: 'var(--muted)' }}>Uploading & processing…</p>
-                  ) : (
+                  style={{ border: `1px dashed ${dragOver ? '#FF5C1A' : 'var(--border-2)'}`, borderRadius: '2px', padding: '32px 20px', textAlign: 'center', cursor: 'pointer', background: dragOver ? 'rgba(255,92,26,0.04)' : 'var(--surface-2)' }}>
+                  <input ref={fileRef} type="file" accept=".replay" onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f) }} style={{ display: 'none' }} />
+                  {uploadLoading ? <p style={{ fontSize: '13px', color: 'var(--muted)' }}>Uploading…</p> : (
                     <>
-                      <p style={{ fontSize: '28px', marginBottom: '10px' }}>📁</p>
-                      <p style={{ fontSize: '14px', color: 'var(--chalk)', fontWeight: 600 }}>Drop your .replay file here</p>
-                      <p style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>or click to browse</p>
+                      <p style={{ fontSize: '22px', marginBottom: '8px' }}>📁</p>
+                      <p style={{ fontSize: '13px', color: 'var(--chalk-2)', fontWeight: 500 }}>Drop your .replay file here</p>
+                      <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>or click to browse</p>
                     </>
                   )}
                 </div>
-
-                {uploadResult?.error && (
-                  <div style={{ background: 'rgba(245,75,75,0.08)', border: '1px solid rgba(245,75,75,0.2)', borderRadius: '10px', padding: '12px 16px', fontSize: '13px', color: '#F54B4B' }}>
-                    {uploadResult.error}
-                  </div>
-                )}
-
+                {uploadResult?.error && <div style={{ background: 'rgba(245,75,75,0.08)', border: '1px solid rgba(245,75,75,0.18)', borderRadius: '2px', padding: '10px 14px', fontSize: '12px', color: '#F54B4B' }}>{uploadResult.error}</div>}
                 {uploadResult?.players && !selectedPlayer && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em', textAlign: 'center' }}>
-                      Who are you in this replay?
-                    </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Who are you?</p>
                     {uploadResult.players.map(p => (
-                      <button key={p.id} onClick={() => setSelectedPlayer(p)}
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px', cursor: 'pointer', color: 'var(--chalk)', textAlign: 'left' }}>
+                      <button key={p.id} onClick={() => { setSelectedPlayer(p); setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80) }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', padding: '10px 14px', cursor: 'pointer', color: 'var(--chalk)' }}>
                         <span style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(p.name)}</span>
                         <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase' }}>{p.platform}</span>
                       </button>
                     ))}
                   </div>
                 )}
-
                 {selectedPlayer && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px' }}>
-                    <div>
-                      <p style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(selectedPlayer.name)}</p>
-                      <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>Showing stats for this replay</p>
-                    </div>
-                    <button onClick={() => { setSelectedPlayer(null); setUploadResult(null) }}
-                      style={{ fontSize: '11px', color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                      Clear
-                    </button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', padding: '10px 14px' }}>
+                    <p style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(selectedPlayer.name)}</p>
+                    <button onClick={() => { setSelectedPlayer(null); setUploadResult(null) }} style={{ fontSize: '11px', color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
                   </div>
                 )}
-
-                <p style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                  Replays are uploaded to{' '}
-                  <a href="https://ballchasing.com" target="_blank" rel="noreferrer" style={{ color: '#FF5C1A', textDecoration: 'none' }}>ballchasing.com</a>
-                  {' '}as public.
-                </p>
               </div>
             )}
-
           </div>
-        </section>
+
+          {/* Right — hero preview */}
+          <div style={{ display: 'none' }} className="hero-preview-desktop">
+            <HeroPreview />
+          </div>
+          <div style={{ display: 'block' }}>
+            <HeroPreview />
+          </div>
+
+        </div>
       </div>
 
       {/* ── Results ── */}
-      {displayStats && (
-        <div style={{ maxWidth: '880px', margin: '0 auto', padding: '0 24px 100px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+      {activeStats && (
+        <div ref={resultsRef} style={{ maxWidth: '1000px', margin: '0 auto', padding: '48px 24px 100px' }}>
 
-            {/* Player header */}
-            <div className="slide-in" style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '24px', borderBottom: '1px solid var(--border)' }}>
-              {tab === 'id' && searchedPlayer?.avatarUrl && (
-                <img src={searchedPlayer.avatarUrl} alt={searchedPlayer.name}
-                  style={{ width: '48px', height: '48px', borderRadius: '10px', border: '1px solid var(--border-2)', flexShrink: 0 }} />
-              )}
-              {tab === 'id' && !searchedPlayer?.avatarUrl && (
-                <div style={{ width: '48px', height: '48px', borderRadius: '10px', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <LogoMark size={22} />
-                </div>
-              )}
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-                  {tab === 'id' ? displayName(searchedPlayer?.name ?? playerId) : displayName(selectedPlayer?.name ?? 'Player')}
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
-                  {rankInfo && (
-                    <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', padding: '2px 10px', borderRadius: '20px', border: `1px solid ${rankInfo.color}40`, background: `${rankInfo.color}15`, color: rankInfo.color }}>
-                      {rankInfo.name}
-                    </span>
-                  )}
-                  <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                    {tab === 'id' ? `${idResult?.replayCount} replays analyzed` : '1 replay analyzed'}
-                  </span>
-                  {idResult?.cached && (
-                    <>
-                      <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(34,201,122,0.1)', color: '#22C97A', border: '1px solid rgba(34,201,122,0.25)' }}>
-                        cached
-                      </span>
-                      <button
-                        onClick={() => runSearch(searchedPlayer?.id ?? playerId, searchedPlayer?.platform ?? platform, playlist, true)}
-                        style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', cursor: 'pointer', transition: 'color 0.15s' }}
-                      >
-                        ↻ Refresh
-                      </button>
-                    </>
-                  )}
-                </div>
+          {/* Player header */}
+          <div className="slide-in" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '40px', paddingBottom: '24px', borderBottom: '1px solid var(--border)' }}>
+            {searchedPlayer?.avatarUrl && (
+              <img src={searchedPlayer.avatarUrl} alt="" style={{ width: '44px', height: '44px', borderRadius: '2px', border: '1px solid var(--border-2)', flexShrink: 0 }} />
+            )}
+            {!searchedPlayer?.avatarUrl && (
+              <div style={{ width: '44px', height: '44px', borderRadius: '2px', background: 'var(--surface-2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <LogoMark size={20} />
               </div>
-              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                {[
-                  { label: 'Issues',    count: tips.filter(t => t.severity === 'critical').length, color: '#F54B4B' },
-                  { label: 'Warnings',  count: tips.filter(t => t.severity === 'warning').length,  color: '#F5A623' },
-                  { label: 'Strengths', count: tips.filter(t => t.severity === 'good').length,     color: '#22C97A' },
-                ].map(({ label, count, color }) => (
-                  <div key={label} style={{ textAlign: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 12px' }}>
-                    <p style={{ fontSize: '1.2rem', fontWeight: 700, color, lineHeight: 1 }}>{count}</p>
-                    <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: 'var(--muted)', marginTop: '3px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
-                  </div>
-                ))}
+            )}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <p style={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '-0.03em' }}>
+                  {demoMode ? 'Sample Analysis' : displayName(searchedPlayer?.name ?? playerId)}
+                </p>
+                {rankInfo && (
+                  <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '2px', border: `1px solid ${rankInfo.color}35`, background: `${rankInfo.color}12`, color: rankInfo.color }}>
+                    {rankInfo.name}
+                  </span>
+                )}
+                {demoMode && (
+                  <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '2px', border: '1px solid rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)', color: '#F5A623' }}>
+                    Demo
+                  </span>
+                )}
+                {idResult?.cached && !demoMode && (
+                  <>
+                    <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '2px', border: '1px solid rgba(34,201,122,0.25)', background: 'rgba(34,201,122,0.08)', color: '#22C97A' }}>cached</span>
+                    <button onClick={() => runSearch(searchedPlayer?.id ?? playerId, searchedPlayer?.platform ?? platform, playlist, true)}
+                      style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '2px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                      ↻ Refresh
+                    </button>
+                  </>
+                )}
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '3px' }}>
+                {demoMode ? 'Diamond II · 10 replays · sample data' : `${activeStats.gamesAnalyzed} replays analyzed`}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {[
+                { label: 'Fix',      count: sorted.filter(t => t.severity === 'critical').length, color: '#F54B4B' },
+                { label: 'Improve',  count: sorted.filter(t => t.severity === 'warning').length,  color: '#F5A623' },
+                { label: 'Strong',   count: sorted.filter(t => t.severity === 'good').length,     color: '#22C97A' },
+              ].map(({ label, count, color }) => (
+                <div key={label} style={{ textAlign: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px', padding: '8px 12px', minWidth: '52px' }}>
+                  <p style={{ fontSize: '1.15rem', fontWeight: 700, color, lineHeight: 1 }}>{count}</p>
+                  <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: 'var(--muted)', marginTop: '3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── What to practice tonight ── */}
+          {practice && (
+            <div className="practice-section" style={{ padding: '20px 20px 20px 26px', marginBottom: '40px' }}>
+              <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: '#FF5C1A', textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: '8px' }}>
+                // What to practice tonight
+              </p>
+              <p style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '8px', color: 'var(--chalk)' }}>{practice.title}</p>
+              <p style={{ fontSize: '13px', color: 'var(--chalk-2)', lineHeight: 1.75 }}>{practice.drill}</p>
+            </div>
+          )}
+
+          {/* Two column layout — coaching on left, charts on right */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', alignItems: 'start', marginBottom: '32px' }}>
+
+            {/* Coaching cards */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>// Coaching feedback</span>
+                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {sorted.map((tip, i) => <CoachingCard key={i} tip={tip} index={i} />)}
               </div>
             </div>
 
             {/* Charts */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
-              <RadarChartComponent stats={displayStats} />
-              <FieldZoneChart stats={displayStats} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <RadarChartComponent stats={activeStats} />
+              <FieldZoneChart stats={activeStats} />
             </div>
+          </div>
 
-            {/* Stat cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-              {STAT_GROUPS(displayStats).map((group, gi) => (
-                <div key={group.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '14px', padding: '20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
-                    <div style={{ width: '4px', height: '14px', borderRadius: '2px', background: group.color }} />
-                    <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{group.label}</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    {group.items.map((item, ii) => (
-                      <StatCard key={item.label} label={item.label} value={item.value} color={group.color} delay={gi * 50 + ii * 30} />
-                    ))}
-                  </div>
+          {/* Supporting stats — secondary, not the headline */}
+          <div style={{ marginBottom: '32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>// Supporting data</span>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', letterSpacing: '0.06em' }}>per game avg</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1px', background: 'var(--border)', border: '1px solid var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
+              {[
+                { label: 'Goals',       value: activeStats.goalsPerGame,          color: '#FF5C1A' },
+                { label: 'Assists',     value: activeStats.assistsPerGame,        color: '#FF5C1A' },
+                { label: 'Saves',       value: activeStats.savesPerGame,          color: '#3B8BF5' },
+                { label: 'Shots',       value: activeStats.shotsPerGame,          color: '#FF5C1A' },
+                { label: 'Shot %',      value: `${activeStats.shotAccuracy}%`,    color: '#FF5C1A' },
+                { label: 'Avg Score',   value: activeStats.avgScore,              color: '#F5A623' },
+                { label: 'Avg Boost',   value: activeStats.avgBoost,              color: '#F5A623' },
+                { label: 'Stolen',      value: activeStats.boostStolenPerGame,    color: '#F5A623' },
+                { label: 'Supersonic',  value: `${activeStats.supersonicPct}%`,   color: '#22C97A' },
+                { label: 'Slow Speed',  value: `${activeStats.slowPct}%`,         color: '#22C97A' },
+                { label: 'Offensive %', value: `${activeStats.offensivePct}%`,    color: '#F54B4B' },
+                { label: 'Defensive %', value: `${activeStats.defensivePct}%`,    color: '#3B8BF5' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="stat-value" style={{ background: 'var(--surface)', padding: '14px 16px' }}>
+                  <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>{label}</p>
+                  <p style={{ fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--chalk)', lineHeight: 1 }}>
+                    {value}
+                    <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: color, marginLeft: '5px', verticalAlign: 'middle', opacity: 0.7 }} />
+                  </p>
                 </div>
               ))}
             </div>
+          </div>
 
-            {/* Most Played With */}
-            {displayStats.topTeammates && displayStats.topTeammates.length > 0 && (
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Most played with</span>
-                  <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
-                  {displayStats.topTeammates.map((teammate: Teammate) => (
-                    <button key={teammate.id}
-                      onClick={() => { setTab('id'); setPlayerId(teammate.id); setPlatform(teammate.platform || 'steam'); setAutoSearch(true) }}
-                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px', cursor: 'pointer', color: 'var(--chalk)', textAlign: 'left', transition: 'border-color 0.15s' }}>
-                      <div>
-                        <p style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(teammate.name)}</p>
-                        <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', marginTop: '2px', textTransform: 'uppercase' }}>
-                          {teammate.platform} · {teammate.count} game{teammate.count !== 1 ? 's' : ''}
-                        </p>
-                      </div>
-                      <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Analyze →</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Coaching feedback */}
+          {/* Most Played With */}
+          {activeStats.topTeammates && activeStats.topTeammates.length > 0 && (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Coaching feedback</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>// Most played with</span>
                 <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {sorted.map((tip, i) => {
-                  const s = SEVERITY[tip.severity]
-                  return (
-                    <div key={i} style={{ background: 'var(--surface)', border: `1px solid ${s.border}`, borderRadius: '12px', padding: '16px 20px', display: 'flex', gap: '14px' }}>
-                      <div style={{ paddingTop: '5px', flexShrink: 0 }}>
-                        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: s.dot }} />
-                      </div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                          <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: s.badge, color: s.dot }}>
-                            {tip.severity}
-                          </span>
-                          <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                            {tip.category}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: '13px', fontWeight: 600, marginBottom: '4px' }}>{tip.title}</p>
-                        <p style={{ fontSize: '13px', color: 'var(--muted)', lineHeight: 1.7 }}>{tip.detail}</p>
-                      </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '6px' }}>
+                {activeStats.topTeammates.map((tm: Teammate) => (
+                  <button key={tm.id} onClick={() => { setTab('id'); setPlayerId(tm.id); setPlatform(tm.platform || 'steam'); setAutoSearch(true) }}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: '2px', padding: '10px 14px', cursor: 'pointer', color: 'var(--chalk)', textAlign: 'left' }}>
+                    <div>
+                      <p style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(tm.name)}</p>
+                      <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', marginTop: '2px', textTransform: 'uppercase' }}>
+                        {tm.platform} · {tm.count} game{tm.count !== 1 ? 's' : ''}
+                      </p>
                     </div>
-                  )
-                })}
+                    <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Analyze →</span>
+                  </button>
+                ))}
               </div>
             </div>
+          )}
 
-          </div>
         </div>
       )}
 
-      {/* Footer */}
-      <footer style={{ borderTop: '1px solid var(--border)', padding: '24px', textAlign: 'center', marginTop: displayStats ? 0 : '80px' }}>
-        <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: 'var(--muted)' }}>
-          NeedBoost · powered by{' '}
-          <a href="https://ballchasing.com" target="_blank" rel="noreferrer" style={{ color: '#FF5C1A', textDecoration: 'none' }}>Ballchasing</a>
+      {/* ── Footer ── */}
+      <footer style={{ borderTop: '1px solid var(--border)', padding: '20px 24px', textAlign: 'center' }}>
+        <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', letterSpacing: '0.06em' }}>
+          NEEDBOOST · POWERED BY <a href="https://ballchasing.com" target="_blank" rel="noreferrer" style={{ color: '#FF5C1A', textDecoration: 'none' }}>BALLCHASING</a>
         </p>
       </footer>
 
