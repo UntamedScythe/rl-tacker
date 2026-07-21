@@ -116,6 +116,7 @@ type DiscoverResponse = {
 }
 
 type ApiResponse = {
+  cached?: boolean
   stats?: Stats & {
     playerRank?: { tier?: number; division?: number; name?: string }
     playerName?: string
@@ -180,15 +181,19 @@ function StatCard({ label, value, color, delay }: { label: string; value: string
 
 // ─── Loading Progress ─────────────────────────────────────────────────────────
 
-function LoadingReplays({ current, total }: { current: number; total: number }) {
-  const pct = total > 0 ? Math.round((current / total) * 100) : 0
+function LoadingReplays({ pct }: { pct: number }) {
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <p style={{ fontSize: '13px', color: 'var(--chalk)' }}>
-          {current === 0 ? 'Connecting to Ballchasing…' : `Analyzing replay ${current} of ${total}`}
+          {pct < 30 ? 'Connecting to Ballchasing…'
+            : pct < 60 ? 'Fetching replays…'
+            : pct < 90 ? 'Analyzing your games…'
+            : 'Almost done…'}
         </p>
-        <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '12px', color: '#FF5C1A' }}>{pct}%</p>
+        <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '12px', color: '#FF5C1A' }}>
+          {Math.round(pct)}%
+        </p>
       </div>
       <div style={{ height: '3px', background: 'var(--muted-2)', borderRadius: '2px', overflow: 'hidden' }}>
         <div style={{
@@ -196,11 +201,11 @@ function LoadingReplays({ current, total }: { current: number; total: number }) 
           width: `${pct}%`,
           background: 'linear-gradient(90deg, #FF5C1A, #FF8C5A)',
           borderRadius: '2px',
-          transition: 'width 0.6s ease',
+          transition: 'width 0.15s ease-out',
         }} />
       </div>
       <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '8px' }}>
-        Takes ~10 seconds — each replay is fetched individually to stay within API limits
+        Usually takes 3–5 seconds
       </p>
     </div>
   )
@@ -246,6 +251,12 @@ const primaryBtn: React.CSSProperties = {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+
+function displayName(name: string): string {
+  if (!name || /^\*+$/.test(name)) return 'Hidden Player'
+  return name
+}
+
 export default function Home() {
 
   // Tab
@@ -256,7 +267,7 @@ export default function Home() {
   const [platform, setPlatform]   = useState('steam')
   const [playlist, setPlaylist]   = useState('')
   const [idLoading, setIdLoading] = useState(false)
-  const [loadProgress, setLoadProgress] = useState({ current: 0, total: 10 })
+  const [loadProgress, setLoadProgress] = useState(0)
   const [idResult, setIdResult]   = useState<ApiResponse | null>(null)
   const [autoSearch, setAutoSearch] = useState(false)
   const [searchedPlayer, setSearchedPlayer] = useState<{ name: string; avatarUrl?: string; id: string; platform: string } | null>(null)
@@ -283,25 +294,35 @@ export default function Home() {
   }, [autoSearch, playerId, platform])
 
   // ── runSearch ──────────────────────────────────────────────────────────────
-  async function runSearch(id: string, plat: string, pl: string) {
+  async function runSearch(id: string, plat: string, pl: string, refresh = false) {
     setIdLoading(true)
     setIdResult(null)
     setSearchedPlayer(null)
-    setLoadProgress({ current: 0, total: 10 })
+    
 
-    let count = 0
+    setLoadProgress(0)
+    let pct = 0
     const timer = setInterval(() => {
-      count = Math.min(count + 1, 9)
-      setLoadProgress({ current: count, total: 10 })
-    }, 900)
+      const pull = pct < 60 ? 0.10 : pct < 80 ? 0.04 : 0.008
+      pct = Math.min(pct + (95 - pct) * pull, 94)
+      setLoadProgress(pct)
+    }, 150)
 
     const playlistParam = pl ? `&playlist=${encodeURIComponent(pl)}` : ''
+    const refreshParam = refresh ? '&refresh=true' : ''
     const data: ApiResponse = await fetch(
-      `/api/stats?playerId=${encodeURIComponent(id)}&platform=${plat}${playlistParam}`
+      `/api/stats?playerId=${encodeURIComponent(id)}&platform=${plat}${playlistParam}${refreshParam}`
     ).then(r => r.json())
 
     clearInterval(timer)
-    setLoadProgress({ current: 10, total: 10 })
+
+    if (data.cached) {
+      // Cached — snap straight to done, no progress bar delay
+      setLoadProgress(100)
+    } else {
+      setLoadProgress(100)
+      await new Promise(r => setTimeout(r, 250))
+    }
     setIdResult(data)
 
     const replayName: string | undefined = data?.stats?.playerName
@@ -324,7 +345,7 @@ export default function Home() {
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     if (!playerId.trim()) return
-    runSearch(playerId.trim(), platform, playlist)
+    runSearch(playerId.trim(), platform, playlist, false)
   }
 
   // ── Name discovery ─────────────────────────────────────────────────────────
@@ -507,7 +528,7 @@ export default function Home() {
                         <button key={`${c.platform}:${c.id}`} onClick={() => selectCandidate(c)}
                           style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px', cursor: 'pointer', color: 'var(--chalk)', textAlign: 'left', transition: 'border-color 0.15s' }}>
                           <div>
-                            <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '3px' }}>{c.name}</p>
+                            <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '3px' }}>{displayName(c.name)}</p>
                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                               <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase' }}>{c.platform}</span>
                               <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)' }}>
@@ -554,7 +575,7 @@ export default function Home() {
                   </div>
                 </form>
 
-                {idLoading && <LoadingReplays current={loadProgress.current} total={loadProgress.total} />}
+                {idLoading && <LoadingReplays pct={loadProgress} />}
 
                 {idResult?.error && (
                   <div style={{ background: 'rgba(245,75,75,0.08)', border: '1px solid rgba(245,75,75,0.2)', borderRadius: '10px', padding: '12px 16px', fontSize: '13px', color: '#F54B4B' }}>
@@ -614,7 +635,7 @@ export default function Home() {
                     {uploadResult.players.map(p => (
                       <button key={p.id} onClick={() => setSelectedPlayer(p)}
                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px', cursor: 'pointer', color: 'var(--chalk)', textAlign: 'left' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 500 }}>{p.name}</span>
+                        <span style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(p.name)}</span>
                         <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase' }}>{p.platform}</span>
                       </button>
                     ))}
@@ -624,7 +645,7 @@ export default function Home() {
                 {selectedPlayer && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px' }}>
                     <div>
-                      <p style={{ fontSize: '13px', fontWeight: 500 }}>{selectedPlayer.name}</p>
+                      <p style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(selectedPlayer.name)}</p>
                       <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>Showing stats for this replay</p>
                     </div>
                     <button onClick={() => { setSelectedPlayer(null); setUploadResult(null) }}
@@ -664,7 +685,7 @@ export default function Home() {
               )}
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: '1.35rem', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-                  {tab === 'id' ? (searchedPlayer?.name ?? playerId) : selectedPlayer?.name ?? 'Player'}
+                  {tab === 'id' ? displayName(searchedPlayer?.name ?? playerId) : displayName(selectedPlayer?.name ?? 'Player')}
                 </p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
                   {rankInfo && (
@@ -675,6 +696,19 @@ export default function Home() {
                   <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
                     {tab === 'id' ? `${idResult?.replayCount} replays analyzed` : '1 replay analyzed'}
                   </span>
+                  {idResult?.cached && (
+                    <>
+                      <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(34,201,122,0.1)', color: '#22C97A', border: '1px solid rgba(34,201,122,0.25)' }}>
+                        cached
+                      </span>
+                      <button
+                        onClick={() => runSearch(searchedPlayer?.id ?? playerId, searchedPlayer?.platform ?? platform, playlist, true)}
+                        style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'transparent', color: 'var(--muted)', border: '1px solid var(--border)', cursor: 'pointer', transition: 'color 0.15s' }}
+                      >
+                        ↻ Refresh
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
@@ -727,7 +761,7 @@ export default function Home() {
                       onClick={() => { setTab('id'); setPlayerId(teammate.id); setPlatform(teammate.platform || 'steam'); setAutoSearch(true) }}
                       style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px', cursor: 'pointer', color: 'var(--chalk)', textAlign: 'left', transition: 'border-color 0.15s' }}>
                       <div>
-                        <p style={{ fontSize: '13px', fontWeight: 500 }}>{teammate.name}</p>
+                        <p style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(teammate.name)}</p>
                         <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', marginTop: '2px', textTransform: 'uppercase' }}>
                           {teammate.platform} · {teammate.count} game{teammate.count !== 1 ? 's' : ''}
                         </p>

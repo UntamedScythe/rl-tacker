@@ -1,7 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { adminClient } from '@/lib/supabase/admin'
 
 const BALLCHASING_BASE = 'https://ballchasing.com/api'
 const TIMEOUT_MS = 10000
+// ── L1 in-memory cache ────────────────────────────────────────────────────────
+const statsL1 = new Map<string, { data: unknown; replayCount: number }>()
+
+function cacheKey(platform: string, playerId: string, playlist: string) {
+  return `${platform}:${playerId}:${playlist || 'all'}`
+}
+
+async function statsFromCache(key: string) {
+  // L1
+  const mem = statsL1.get(key)
+  if (mem) return mem
+
+  // L2 Supabase
+  if (!adminClient) return null
+  try {
+    const { data, error } = await adminClient
+      .from('player_stats_cache')
+      .select('stats, replay_count')
+      .eq('cache_key', key)
+      .single()
+    if (error || !data) return null
+    const entry = { data: data.stats, replayCount: data.replay_count }
+    statsL1.set(key, entry)
+    return entry
+  } catch { return null }
+}
+
+async function writeStatsCache(key: string, stats: unknown, replayCount: number) {
+  statsL1.set(key, { data: stats, replayCount })
+  if (!adminClient) return
+  try {
+    await adminClient.from('player_stats_cache').upsert(
+      { cache_key: key, stats, replay_count: replayCount },
+      { onConflict: 'cache_key' }
+    )
+  } catch (err) {
+    console.error('[statsCache] write error (non-fatal):', err)
+  }
+}
 
 async function fetchWithTimeout(url: string, options: RequestInit, ms = TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController()
@@ -67,7 +107,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
   }
 
+  const key = cacheKey(platform, playerId, playlist)
+  const forceRefresh = searchParams.get('refresh') === 'true'
+
   try {
+    // Check cache first (skip if refresh requested)
+    if (!forceRefresh) {
+      const cached = await statsFromCache(key)
+      if (cached) {
+        console.log(`[statsCache] HIT for ${key}`)
+        return NextResponse.json({ stats: cached.data, replayCount: cached.replayCount, cached: true })
+      }
+    } else {
+      console.log(`[statsCache] REFRESH requested for ${key}`)
+      statsL1.delete(key)
+    }
+    console.log(`[statsCache] MISS for ${key}`)
+
     // Fetch 10 replays instead of 20 to stay within rate limits
     const replaysResult = await fetchJSON(
       `${BALLCHASING_BASE}/replays?player-id=${encodeURIComponent(`${platform}:${playerId}`)}&count=10&sort-by=replay-date&sort-dir=desc${playlist ? `&playlist=${encodeURIComponent(playlist)}` : ''}`,
@@ -90,15 +146,22 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Fetch one at a time with delay to avoid rate limiting
+    // Fetch in pairs with 550ms between pairs — safely within 2 calls/second limit
     const detailedReplays: Record<string, unknown>[] = []
-    for (const replay of replays) {
-      const result = await fetchJSON(`${BALLCHASING_BASE}/replays/${replay.id}`, apiKey)
-      if (result.ok && result.data && !result.data.error) {
-        detailedReplays.push(result.data)
+    for (let i = 0; i < replays.length; i += 2) {
+      const pair = replays.slice(i, i + 2)
+      const results = await Promise.all(
+        pair.map(replay => fetchJSON(`${BALLCHASING_BASE}/replays/${replay.id}`, apiKey))
+      )
+      for (const result of results) {
+        if (result.ok && result.data && !result.data.error) {
+          detailedReplays.push(result.data)
+        }
       }
-      // 800ms between each request — stays well within free tier limits
-      await new Promise(r => setTimeout(r, 800))
+      // Wait 550ms between pairs — 2 calls per 550ms is well within the 2/second limit
+      if (i + 2 < replays.length) {
+        await new Promise(r => setTimeout(r, 550))
+      }
     }
 
     if (detailedReplays.length === 0) {
@@ -107,7 +170,8 @@ export async function GET(req: NextRequest) {
 
     const stats = aggregateStats(detailedReplays as Replay[], playerId)
     console.log(`Matched ${stats.gamesAnalyzed} of ${detailedReplays.length} replays for player ${playerId}`)
-    return NextResponse.json({ stats, replayCount: stats.gamesAnalyzed })
+    await writeStatsCache(key, stats, stats.gamesAnalyzed)
+    return NextResponse.json({ stats, replayCount: stats.gamesAnalyzed, cached: false })
 
   } catch (err) {
     const message = err instanceof Error && err.name === 'AbortError'

@@ -55,11 +55,6 @@ body {
 }
 .stat-value { animation: countUp 0.35s ease both; }
 
-@keyframes replayLoad {
-  from { width: 0%; }
-  to   { width: 100%; }
-}
-
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(-6px); }
   to   { opacity: 1; transform: translateX(0); }

@@ -113,6 +113,16 @@ async function performSearch(
   }
 
   const replays = data?.list ?? []
+
+  // Temporary debug
+  const allNames = new Set<string>()
+    for (const replay of replays as { blue?: { players?: { name?: string }[] }; orange?: { players?: { name?: string }[] } }[]) {
+    for (const p of [...(replay.blue?.players ?? []), ...(replay.orange?.players ?? [])]) {
+      if (p.name) allNames.add(p.name)
+    }
+  }
+console.log('Names found in replays:', [...allNames])
+
   const candidates = extractCandidates(replays as Parameters<typeof extractCandidates>[0], rawName, CANDIDATE_CAP)
 
   // Cache the result — zero results get a shorter TTL (handled inside cacheSet)
@@ -161,7 +171,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       : ''
 
   const trimmed = rawName.trim()
-
+  console.log('Search term chars:', [...trimmed].map(c => `${c}(${c.charCodeAt(0)})`).join(' '))
   // 2. Validate
   if (trimmed.length < 2) {
     return errorResponse(trimmed, 'Enter at least 2 characters.', 'INVALID_INPUT')
@@ -225,3 +235,4 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const result = await promise
   return NextResponse.json(result)
 }
+
