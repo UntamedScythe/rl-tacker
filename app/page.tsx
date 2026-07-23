@@ -112,16 +112,15 @@ function LogoMark({ size = 28 }: { size?: number }) {
 // ─── Coaching Card ────────────────────────────────────────────────────────────
 // The signature visual element of NeedBoost
 
-function CoachingCard({ tip, index, onHover }: { tip: Tip; index: number; onHover?: (i: number | null) => void }) {
+function CoachingCard({ tip, index, connected }: { tip: Tip; index: number; connected?: boolean }) {
   const [expanded, setExpanded] = useState(index === 0)
   const sev = tip.severity
 
   return (
     <div
-      className={`coaching-card ${sev}`}
+      className={`coaching-card ${sev}${connected ? ' connected' : ''}`}
       style={{ animationDelay: `${index * 60}ms` }}
-      onMouseEnter={() => onHover?.(index)}
-      onMouseLeave={() => onHover?.(null)}
+
     >
       <div
         style={{ padding: '16px 20px 16px 24px', cursor: 'pointer' }}
@@ -200,7 +199,7 @@ function HeroPreview() {
   return (
     <div style={{ position: 'relative', height: '320px' }}>
       {/* Background coaching card */}
-      <div className="hero-card-float-delay" style={{ position: 'absolute', right: 0, top: '20px', width: '300px', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', overflow: 'hidden', opacity: 0.7 }}>
+      <div className="hero-card-float-delay" style={{ position: 'absolute', right: 0, top: '20px', width: '82%', maxWidth: '300px', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', overflow: 'hidden', opacity: 0.7 }}>
         <div style={{ width: '3px', position: 'absolute', left: 0, top: 0, bottom: 0, background: '#F5A623' }} />
         <div style={{ padding: '14px 16px 14px 20px' }}>
           <div style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: '#F5A623', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Warning · Positioning</div>
@@ -210,7 +209,7 @@ function HeroPreview() {
       </div>
 
       {/* Foreground coaching card */}
-      <div className="hero-card-float" style={{ position: 'absolute', left: 0, top: '60px', width: '320px', background: 'var(--surface-2)', border: '1px solid var(--border-3)', borderRadius: '2px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
+      <div className="hero-card-float" style={{ position: 'absolute', left: 0, top: '60px', width: '88%', maxWidth: '320px', background: 'var(--surface-2)', border: '1px solid var(--border-3)', borderRadius: '2px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
         <div style={{ width: '3px', position: 'absolute', left: 0, top: 0, bottom: 0, background: '#F54B4B' }} />
         <div style={{ padding: '16px 18px 16px 22px' }}>
           <div style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: '#F54B4B', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>Critical · Boost</div>
@@ -266,7 +265,7 @@ export default function Home() {
 
   // Demo mode
   const [demoMode, setDemoMode] = useState(false)
-  const [highlightedCard, setHighlightedCard] = useState<number | null>(null)
+  const [radarCategory, setRadarCategory] = useState<string | null>(null)
 
   // Auto-search on teammate click
   const autoRef = useRef(false)
@@ -362,17 +361,6 @@ export default function Home() {
   const rankInfo = (demoMode ? SAMPLE_STATS : idResult?.stats)?.playerRank?.tier != null
     ? (RANK_NAMES[(demoMode ? SAMPLE_STATS : idResult!.stats!)!.playerRank!.tier!] ?? null) : null
 
-  // Derive mascot state from app state
-  const boostState: BoostState = idLoading || uploadLoading
-    ? 'analyzing'
-    : activeStats && sorted.length > 0
-      ? (highlightedCard !== null && highlightedCard >= -1)
-        ? 'coaching'
-        : 'success'
-      : idResult?.error
-        ? 'error'
-        : 'idle'
-
   const inputStyle: React.CSSProperties = {
     background: 'var(--surface-2)', border: '1px solid var(--border-2)',
     borderRadius: '2px', padding: '11px 14px', fontSize: '13px',
@@ -383,9 +371,15 @@ export default function Home() {
     borderRadius: '2px', padding: '10px 12px', fontSize: '12px',
     color: 'var(--muted)', fontFamily: 'var(--font-geist-mono)', outline: 'none',
   }
+  // Mascot state — loading, results, error, or idle only
+  const boostState: BoostState =
+    idLoading || uploadLoading ? 'analyzing'
+    : activeStats && sorted.length > 0 ? 'success'
+    : idResult?.error ? 'error'
+    : 'idle'
 
   return (
-    <main style={{ minHeight: '100vh', background: 'var(--pitch)', color: 'var(--chalk)' }}>
+    <main className="page-grid" style={{ minHeight: '100vh', background: 'var(--pitch)', color: 'var(--chalk)' }}>
 
       {/* ── Nav ── */}
       <nav style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(7,9,11,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)' }}>
@@ -408,7 +402,7 @@ export default function Home() {
 
       {/* ── Hero ── */}
       <div className="tele-grid" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '64px 24px 72px', display: 'grid', gridTemplateColumns: '1fr 380px', gap: '64px', alignItems: 'center' }}>
+        <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '64px 24px 72px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 360px)', gap: '48px', alignItems: 'center' }}>
 
           {/* Left — copy + search */}
           <div>
@@ -557,10 +551,7 @@ export default function Home() {
           </div>
 
           {/* Right — hero preview */}
-          <div style={{ display: 'none' }} className="hero-preview-desktop">
-            <HeroPreview />
-          </div>
-          <div style={{ display: 'block' }}>
+          <div style={{ overflow: 'hidden', position: 'relative' }}>
             <HeroPreview />
           </div>
 
@@ -623,8 +614,7 @@ export default function Home() {
           {/* ── What to practice tonight ── */}
           {practice && (
             <div className="practice-section" style={{ padding: '20px 20px 20px 26px', marginBottom: '40px' }}
-              onMouseEnter={() => setHighlightedCard(-1)}
-              onMouseLeave={() => setHighlightedCard(null)}>
+>
               <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: '#FF5C1A', textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: '8px' }}>
                 // What to practice tonight
               </p>
@@ -639,49 +629,109 @@ export default function Home() {
             {/* Coaching cards */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>// Coaching feedback</span>
-                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+                <div style={{ width: '2px', height: '12px', borderRadius: '1px', background: 'var(--velocity)' }} />
+                <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: 'var(--muted-bright)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Coaching Feedback</span>
+                <div style={{ flex: 1, height: '1px', background: 'var(--border-default)' }} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {sorted.map((tip, i) => <CoachingCard key={i} tip={tip} index={i} onHover={setHighlightedCard} />)}
+                {sorted.map((tip, i) => <CoachingCard key={i} tip={tip} index={i} connected={radarCategory === tip.category} />)}
               </div>
             </div>
 
             {/* Charts */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <RadarChartComponent stats={activeStats} />
+              <RadarChartComponent stats={activeStats} onAxisHover={setRadarCategory} />
               <FieldZoneChart stats={activeStats} />
             </div>
           </div>
 
-          {/* Supporting stats — secondary, not the headline */}
+          {/* Evidence — 2x2 card grid grouped by coaching category */}
           <div style={{ marginBottom: '32px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>// Supporting data</span>
-              <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
-              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', letterSpacing: '0.06em' }}>per game avg</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+              <div style={{ width: '2px', height: '12px', borderRadius: '1px', background: 'linear-gradient(180deg, #4CC9F0, rgba(76,201,240,0.3))' }} />
+              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: '#4CC9F0', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Evidence</span>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(76,201,240,0.1)' }} />
+              <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '9px', color: 'rgba(76,201,240,0.35)', letterSpacing: '0.08em' }}>per game avg</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '1px', background: 'var(--border)', border: '1px solid var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '8px' }}>
               {[
-                { label: 'Goals',       value: activeStats.goalsPerGame,          color: '#FF5C1A' },
-                { label: 'Assists',     value: activeStats.assistsPerGame,        color: '#FF5C1A' },
-                { label: 'Saves',       value: activeStats.savesPerGame,          color: '#3B8BF5' },
-                { label: 'Shots',       value: activeStats.shotsPerGame,          color: '#FF5C1A' },
-                { label: 'Shot %',      value: `${activeStats.shotAccuracy}%`,    color: '#FF5C1A' },
-                { label: 'Avg Score',   value: activeStats.avgScore,              color: '#F5A623' },
-                { label: 'Avg Boost',   value: activeStats.avgBoost,              color: '#F5A623' },
-                { label: 'Stolen',      value: activeStats.boostStolenPerGame,    color: '#F5A623' },
-                { label: 'Supersonic',  value: `${activeStats.supersonicPct}%`,   color: '#22C97A' },
-                { label: 'Slow Speed',  value: `${activeStats.slowPct}%`,         color: '#22C97A' },
-                { label: 'Offensive %', value: `${activeStats.offensivePct}%`,    color: '#F54B4B' },
-                { label: 'Defensive %', value: `${activeStats.defensivePct}%`,    color: '#3B8BF5' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="stat-value" style={{ background: 'var(--surface)', padding: '14px 16px' }}>
-                  <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>{label}</p>
-                  <p style={{ fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--chalk)', lineHeight: 1 }}>
-                    {value}
-                    <span style={{ display: 'inline-block', width: '5px', height: '5px', borderRadius: '50%', background: color, marginLeft: '5px', verticalAlign: 'middle', opacity: 0.7 }} />
-                  </p>
+                { group: 'Offense',     color: '#FF5C1A', stats: [
+                  { label: 'Goals',    value: activeStats.goalsPerGame },
+                  { label: 'Assists',  value: activeStats.assistsPerGame },
+                  { label: 'Shots',    value: activeStats.shotsPerGame },
+                  { label: 'Shot %',   value: `${activeStats.shotAccuracy}%` },
+                ]},
+                { group: 'Defense',     color: '#3B8BF5', stats: [
+                  { label: 'Saves',        value: activeStats.savesPerGame },
+                  { label: 'Defensive %',  value: `${activeStats.defensivePct}%` },
+                  { label: 'Avg Score',    value: activeStats.avgScore },
+                  { label: 'Demos Taken',  value: activeStats.demosTakenPerGame },
+                ]},
+                { group: 'Boost',       color: '#F5A623', stats: [
+                  { label: 'Avg Boost',  value: activeStats.avgBoost },
+                  { label: 'Stolen',     value: activeStats.boostStolenPerGame },
+                  { label: 'Supersonic', value: `${activeStats.supersonicPct}%` },
+                  { label: 'Slow %',     value: `${activeStats.slowPct}%` },
+                ]},
+                { group: 'Positioning', color: '#22C97A', stats: [
+                  { label: 'Offensive %', value: `${activeStats.offensivePct}%` },
+                  { label: 'Neutral %',   value: `${activeStats.neutralPct}%` },
+                  { label: 'Big Pads',    value: activeStats.bigPadsPerGame },
+                  { label: 'Demos Given', value: activeStats.demosInflictedPerGame },
+                ]},
+              ].map(({ group, color, stats: gs }) => (
+                <div key={group} style={{
+                  background: 'var(--surface-1)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: '2px',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}>
+                  {/* Left color bar */}
+                  <div style={{
+                    position: 'absolute', left: 0, top: 0, bottom: 0,
+                    width: '2px', background: color, opacity: 0.7,
+                  }} />
+                  {/* Category header */}
+                  <div style={{
+                    padding: '10px 12px 8px 14px',
+                    borderBottom: '1px solid var(--border-subtle)',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                  }}>
+                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: color, opacity: 0.8 }} />
+                    <span style={{
+                      fontFamily: 'var(--font-geist-mono)',
+                      fontSize: '11px', fontWeight: 600,
+                      color, textTransform: 'uppercase', letterSpacing: '0.1em',
+                    }}>{group}</span>
+                  </div>
+                  {/* 2x2 stat grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: 'var(--border-subtle)' }}>
+                    {gs.map(({ label, value }) => (
+                      <div key={label} className="stat-value" style={{
+                        padding: '10px 12px',
+                        background: 'var(--surface-1)',
+                      }}>
+                        <p style={{
+                          fontFamily: 'var(--font-geist-mono)',
+                          fontSize: '10px', color: 'var(--muted-bright)',
+                          textTransform: 'uppercase', letterSpacing: '0.05em',
+                          marginBottom: '3px',
+                        }}>{label}</p>
+                        <p style={{
+                          fontSize: '1.2rem', fontWeight: 700,
+                          letterSpacing: '-0.03em', color: 'var(--chalk)', lineHeight: 1,
+                        }}>
+                          {value}
+                          <span style={{
+                            display: 'inline-block', width: '4px', height: '4px',
+                            borderRadius: '50%', background: color,
+                            marginLeft: '4px', verticalAlign: 'middle', opacity: 0.55,
+                          }} />
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -690,9 +740,10 @@ export default function Home() {
           {/* Most Played With */}
           {activeStats.topTeammates && activeStats.topTeammates.length > 0 && (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>// Most played with</span>
-                <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ width: '2px', height: '12px', borderRadius: '1px', background: 'var(--muted-2)' }} />
+                <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: 'var(--muted-bright)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Most Played With</span>
+                <div style={{ flex: 1, height: '1px', background: 'var(--border-default)' }} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '6px' }}>
                 {activeStats.topTeammates.map((tm: Teammate) => (

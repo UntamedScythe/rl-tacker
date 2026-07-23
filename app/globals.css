@@ -1,25 +1,38 @@
 @import "tailwindcss";
 
 :root {
-  /* Core palette */
+  /* ── Surface depth ladder ── */
   --pitch:      #07090B;
-  --surface:    #0C0F12;
-  --surface-2:  #111418;
-  --surface-3:  #161B20;
-  --border:     rgba(255,255,255,0.055);
-  --border-2:   rgba(255,255,255,0.09);
-  --border-3:   rgba(255,255,255,0.14);
-  --chalk:      #E8EBF0;
-  --chalk-2:    #B8BCC8;
-  --muted:      #525866;
-  --muted-2:    #1C2230;
-  --velocity:   #FF5C1A;
-  --velocity-2: rgba(255,92,26,0.15);
-  --velocity-3: rgba(255,92,26,0.08);
-  --blue:       #3B8BF5;
-  --green:      #22C97A;
-  --amber:      #F5A623;
-  --red:        #F54B4B;
+  --surface-0:  #0A0D10;
+  --surface-1:  #0F1318;
+  --surface-2:  #141920;
+  --surface-3:  #1A2028;
+
+  /* ── Borders ── */
+  --border-subtle:  rgba(255,255,255,0.04);
+  --border-default: rgba(255,255,255,0.08);
+  --border-strong:  rgba(255,255,255,0.14);
+
+  /* ── Legacy aliases so existing code doesn't break ── */
+  --surface:  #0F1318;
+  --border:   rgba(255,255,255,0.08);
+  --border-2: rgba(255,255,255,0.12);
+  --muted-2:  #1C2230;
+
+  /* ── Typography ── */
+  --chalk:        #E8EBF0;
+  --chalk-2:      #B8BCC8;
+  --muted-bright: #7A8299;
+  --muted:        #525866;
+
+  /* ── Brand colors ── */
+  --velocity: #FF5C1A;
+  --cyan:     #4CC9F0;
+  --cyan-dim: rgba(76,201,240,0.12);
+  --green:    #22C97A;
+  --amber:    #F5A623;
+  --red:      #F54B4B;
+  --blue:     #3B8BF5;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,34 +48,43 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: var(--pitch); }
 ::-webkit-scrollbar-thumb { background: var(--muted-2); border-radius: 2px; }
 
-/* ── Telemetry grid background ── */
+/* ── Page-level tele-grid via a non-fixed wrapper ── */
+.page-grid {
+  position: relative;
+}
+.page-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.016) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+.page-grid > * { position: relative; z-index: 1; }
+
+/* ── Hero tele-grid (slightly stronger) ── */
 .tele-grid {
   background-image:
-    linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.024) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
-/* ── Corner cut utility ── */
-.corner-cut {
-  clip-path: polygon(14px 0%, 100% 0%, 100% 100%, 0% 100%, 0% 14px);
-}
-.corner-cut-sm {
-  clip-path: polygon(8px 0%, 100% 0%, 100% 100%, 0% 100%, 0% 8px);
-}
-
-/* ── Coaching card — the signature element ── */
+/* ── Coaching card ── */
 .coaching-card {
-  background: var(--surface-2);
-  border: 1px solid var(--border-2);
+  background: var(--surface-1);
+  border: 1px solid var(--border-default);
   border-radius: 2px;
   position: relative;
   overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .coaching-card::before {
   content: '';
@@ -73,15 +95,57 @@ body {
 .coaching-card.critical::before { background: var(--red); }
 .coaching-card.warning::before  { background: var(--amber); }
 .coaching-card.good::before     { background: var(--green); }
+.coaching-card.connected {
+  border-color: rgba(76,201,240,0.4);
+  background: rgba(76,201,240,0.04);
+}
+.coaching-card.connected::after {
+  content: '';
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: rgba(76,201,240,0.6);
+}
 
-/* ── Status pulse ── */
+/* ── Practice section ── */
+.practice-section {
+  background: linear-gradient(135deg, rgba(255,92,26,0.07) 0%, rgba(255,92,26,0.02) 100%);
+  border: 1px solid rgba(255,92,26,0.2);
+  border-radius: 2px;
+  position: relative;
+}
+.practice-section::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--velocity);
+}
+
+/* ── Radar frame ── */
+.radar-frame {
+  border: 1px solid rgba(76,201,240,0.18);
+  border-radius: 2px;
+  position: relative;
+  transition: border-color 0.2s ease;
+}
+.radar-frame::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(76,201,240,0.5), transparent);
+}
+.radar-frame:hover { border-color: rgba(76,201,240,0.3); }
+
+/* ── Status dot ── */
 @keyframes statusPulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.3; }
 }
 .status-dot { animation: statusPulse 2s ease-in-out infinite; }
 
-/* ── Boost dot on logo ── */
+/* ── Boost logo dot ── */
 @keyframes boostPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.4; transform: scale(0.75); }
@@ -99,39 +163,35 @@ body {
 .fade-up-3 { animation: fadeUp 0.5s 0.21s ease both; }
 .fade-up-4 { animation: fadeUp 0.5s 0.28s ease both; }
 
-/* ── Stat value entry ── */
+/* ── Stat entry ── */
 @keyframes statEntry {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 .stat-value { animation: statEntry 0.4s ease both; }
 
-/* ── Slide in from left ── */
+/* ── Slide in ── */
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(-8px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 .slide-in { animation: slideIn 0.35s ease both; }
 
-/* ── Practice section ── */
-.practice-section {
-  background: linear-gradient(135deg, rgba(255,92,26,0.06) 0%, rgba(255,92,26,0.02) 100%);
-  border: 1px solid rgba(255,92,26,0.18);
-  border-radius: 2px;
-  position: relative;
-}
-.practice-section::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--velocity);
-}
-
-/* ── Sample hero card animation ── */
+/* ── Hero card float ── */
 @keyframes heroCardFloat {
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-4px); }
 }
-.hero-card-float { animation: heroCardFloat 4s ease-in-out infinite; }
+.hero-card-float       { animation: heroCardFloat 4s ease-in-out infinite; }
 .hero-card-float-delay { animation: heroCardFloat 4s 1.3s ease-in-out infinite; }
+
+/* Prevent mascot animations from being affected by nearby DOM changes */
+.boost-root {
+  will-change: transform;
+  isolation: isolate;
+}
+
+/* Prevent coaching card transitions from affecting paint layers above */
+.coaching-card {
+  isolation: isolate;
+}

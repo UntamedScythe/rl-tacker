@@ -21,117 +21,94 @@ interface BoostProps {
 }
 
 const STYLES = `
-  /* ── BASE: always running, never stops ───────────────────────────────────── */
-  @keyframes b-base-float {
-    0%, 100% { transform: translateY(0px); }
-    50%       { transform: translateY(-5px); }
+  /* Force GPU compositing on all animated elements — keeps off main thread */
+  .b-gpu {
+    will-change: transform;
+    transform: translateZ(0);
   }
-  @keyframes b-base-glow {
-    0%, 100% { opacity: 0.3; transform: scaleX(1); }
-    50%       { opacity: 0.5; transform: scaleX(1.1); }
+
+  /* ── IDLE: one float, one blink — nothing else ── */
+  @keyframes b-base-float {
+    0%, 100% { transform: translateZ(0) translateY(0px); }
+    50%       { transform: translateZ(0) translateY(-5px); }
   }
   @keyframes b-base-blink {
-    0%, 88%, 100% { transform: scaleY(1); }
-    92%            { transform: scaleY(0.06); }
-    95%            { transform: scaleY(1); }
+    0%, 88%, 100% { transform: translateZ(0) scaleY(1); }
+    92%            { transform: translateZ(0) scaleY(0.06); }
+    95%            { transform: translateZ(0) scaleY(1); }
   }
-  @keyframes b-base-pupil {
-    0%, 100% { opacity: 0.9; }
-    50%       { opacity: 1; }
+  @keyframes b-glow-breathe {
+    0%, 100% { opacity: 0.22; }
+    50%       { opacity: 0.42; }
   }
 
-  /* ── SEARCHING overlay ───────────────────────────────────────────────────── */
-  @keyframes b-tilt {
-    0%, 100% { transform: rotate(0deg); }
-    25%       { transform: rotate(-8deg); }
-    75%       { transform: rotate(8deg); }
+  /* ── SEARCHING ── */
+  @keyframes b-search-tilt {
+    0%, 100% { transform: translateZ(0) rotate(0deg); }
+    25%       { transform: translateZ(0) rotate(-7deg); }
+    75%       { transform: translateZ(0) rotate(7deg); }
   }
-  @keyframes b-eye-scan {
-    0%, 100% { transform: translateX(0px); }
-    25%       { transform: translateX(-5px); }
-    75%       { transform: translateX(5px); }
+  @keyframes b-search-scan {
+    0%, 100% { transform: translateZ(0) translateX(0px); }
+    25%       { transform: translateZ(0) translateX(-5px); }
+    75%       { transform: translateZ(0) translateX(5px); }
   }
   @keyframes b-scan-ring {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-  }
-  @keyframes b-search-glow {
-    0%, 100% { opacity: 0.4; transform: scaleX(1.1); }
-    50%       { opacity: 0.65; transform: scaleX(1.3); }
+    from { transform: translateZ(0) rotate(0deg); }
+    to   { transform: translateZ(0) rotate(360deg); }
   }
 
-  /* ── ANALYZING overlay ───────────────────────────────────────────────────── */
+  /* ── ANALYZING ── */
   @keyframes b-iris-contract {
-    0%, 100% { transform: scale(1); }
-    45%       { transform: scale(0.32); }
-    55%       { transform: scale(0.32); }
+    0%, 100% { transform: translateZ(0) scale(1); }
+    45%, 55%  { transform: translateZ(0) scale(0.32); }
   }
   @keyframes b-ring-cw {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+    from { transform: translateZ(0) rotate(0deg); }
+    to   { transform: translateZ(0) rotate(360deg); }
   }
   @keyframes b-ring-ccw {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(-360deg); }
-  }
-  @keyframes b-analyze-glow {
-    0%, 100% { opacity: 0.6; transform: scaleX(1.3); }
-    50%       { opacity: 0.9; transform: scaleX(1.6); }
-  }
-  @keyframes b-panel-flicker {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.75; }
+    from { transform: translateZ(0) rotate(0deg); }
+    to   { transform: translateZ(0) rotate(-360deg); }
   }
 
-  /* ── COACHING overlay ────────────────────────────────────────────────────── */
+  /* ── COACHING ── */
   @keyframes b-coach-iris {
-    0%, 100% { transform: scale(1.08); opacity: 1; }
-    50%       { transform: scale(1.0);  opacity: 0.92; }
-  }
-  @keyframes b-coach-glow {
-    0%, 100% { opacity: 0.75; transform: scaleX(1.5); }
-    50%       { opacity: 1.0; transform: scaleX(1.75); }
+    0%, 100% { transform: translateZ(0) scale(1.08); opacity: 1; }
+    50%       { transform: translateZ(0) scale(1.0);  opacity: 0.9; }
   }
 
-  /* ── SUCCESS overlay (plays once) ────────────────────────────────────────── */
+  /* ── SUCCESS (plays once) ── */
   @keyframes b-hop {
-    0%   { transform: translateY(0px); }
-    28%  { transform: translateY(-14px); }
-    52%  { transform: translateY(-8px); }
-    72%  { transform: translateY(-12px); }
-    100% { transform: translateY(-5px); }
+    0%   { transform: translateZ(0) translateY(0px); }
+    28%  { transform: translateZ(0) translateY(-14px); }
+    52%  { transform: translateZ(0) translateY(-8px); }
+    72%  { transform: translateZ(0) translateY(-12px); }
+    100% { transform: translateZ(0) translateY(-5px); }
   }
   @keyframes b-pulse-ring {
     0%   { r: 10; opacity: 1;   stroke-width: 2.5; }
     100% { r: 44; opacity: 0;   stroke-width: 0.3; }
   }
-  @keyframes b-success-glow {
-    0%   { opacity: 1;   transform: scaleX(1.8); }
-    100% { opacity: 0.5; transform: scaleX(1.2); }
-  }
 
-  /* ── ERROR overlay (plays once, holds) ───────────────────────────────────── */
+  /* ── ERROR (plays once, holds) ── */
   @keyframes b-shake {
-    0%, 100% { transform: translateX(0px); }
-    15%       { transform: translateX(-7px); }
-    30%       { transform: translateX(7px); }
-    45%       { transform: translateX(-5px); }
-    60%       { transform: translateX(5px); }
-    75%       { transform: translateX(-2px); }
+    0%, 100% { transform: translateZ(0) translateX(0px); }
+    15%       { transform: translateZ(0) translateX(-7px); }
+    30%       { transform: translateZ(0) translateX(7px); }
+    45%       { transform: translateZ(0) translateX(-5px); }
+    60%       { transform: translateZ(0) translateX(5px); }
+    75%       { transform: translateZ(0) translateX(-2px); }
   }
   @keyframes b-eye-narrow {
-    0%, 100% { transform: scaleY(0.18); }
-  }
-  @keyframes b-error-glow {
-    0%, 100% { opacity: 0.12; transform: scaleX(0.7); }
-    50%       { opacity: 0.2;  transform: scaleX(0.85); }
+    0%, 100% { transform: translateZ(0) scaleY(0.18); }
   }
 
-  /* ── Fade transition for overlay layers ──────────────────────────────────── */
-  .b-overlay {
-    transition: opacity 0.6s ease;
-  }
+  /* ── Overlay fade ── */
+  .b-overlay { transition: opacity 0.5s ease; }
 `
+
+
 
 function injectStyles() {
   if (typeof document === 'undefined') return
@@ -175,7 +152,7 @@ export default function Boost({ state = 'idle', size = 48, className, style }: B
   if (!mounted) {
     return (
       <svg width={size} height={size} viewBox="0 0 100 100" fill="none"
-        className={className} style={{ overflow: 'visible', ...style }}>
+        className={className} style={{ overflow: 'visible', willChange: 'transform', ...style }}>
         <polygon points="50,6 86,27 86,73 50,94 14,73 14,27"
           fill="#0A0D10" stroke="rgba(255,255,255,0.13)" strokeWidth="1.2" />
         <polygon points="50,28 72,36 74,55 72,64 50,72 28,64 26,55 28,36"
@@ -191,7 +168,7 @@ export default function Boost({ state = 'idle', size = 48, className, style }: B
     <svg
       width={size} height={size} viewBox="0 0 100 100"
       fill="none" xmlns="http://www.w3.org/2000/svg"
-      className={className} style={{ overflow: 'visible', ...style }}
+      className={className} style={{ overflow: 'visible', willChange: 'transform', ...style }}
     >
       <defs>
         <filter id="bv4-shadow" x="-25%" y="-25%" width="150%" height="150%">
@@ -228,7 +205,7 @@ export default function Boost({ state = 'idle', size = 48, className, style }: B
       <g filter="url(#bv4-shadow)">
 
         {/* ── CONTINUOUS BASE FLOAT — never changes, never resets ── */}
-        <g style={{ animation: 'b-base-float 4s ease-in-out infinite', transformOrigin: O }}>
+        <g style={{ animation: 'b-base-float 4s ease-in-out infinite', transformOrigin: O, willChange: 'transform' }}>
 
           {/* ── SEARCHING TILT OVERLAY — fades in on top of float ── */}
           <g style={{ ...vis(state === 'searching'), animation: state === 'searching' ? 'b-tilt 2.4s ease-in-out infinite' : 'none', transformOrigin: O }}>
@@ -307,7 +284,7 @@ export default function Boost({ state = 'idle', size = 48, className, style }: B
           </g>
 
           {/* Eye group — base blink always running */}
-          <g style={{ animation: 'b-base-blink 7s ease-in-out infinite', transformOrigin: O }}>
+          <g style={{ animation: 'b-base-blink 7s ease-in-out infinite', transformOrigin: O, willChange: 'transform' }}>
 
             {/* Searching eye scan — fades in on top of blink */}
             <g style={{ ...vis(state === 'searching'), animation: state === 'searching' ? 'b-eye-scan 2.4s ease-in-out infinite' : 'none', transformOrigin: O }}>
