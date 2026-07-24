@@ -3,8 +3,30 @@
 import { useState, useRef } from 'react'
 import { generateAdvice, getPracticeTonight, type Stats, type Tip, type Teammate } from '@/lib/advice'
 import RadarChartComponent from '@/components/RadarChartComponent'
+import RankIcon, { getRankInfo } from '@/components/RankIcon'
 import Boost, { type BoostState } from '@/components/Boost'
 import FieldZoneChart from '@/components/FieldZoneChart'
+import type { DiscoverResponse, PlayerCandidate } from '@/lib/discover'
+
+type ApiResponse = {
+  stats?: Stats
+  replayCount?: number
+  cached?: boolean
+  error?: string
+}
+
+type UploadPlayer = {
+  id?: string
+  platform?: string
+  name?: string
+  stats?: Record<string, Record<string, number>>
+}
+
+type UploadResponse = {
+  replayId?: string
+  players?: UploadPlayer[]
+  error?: string
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -25,88 +47,56 @@ const PLAYLISTS = [
   { value: 'unranked-duels',    label: 'Casual 1v1'  },
 ]
 
-const RANK_NAMES: Record<number, { name: string; color: string }> = {
-  0:  { name: 'Unranked',           color: '#888888' },
-  1:  { name: 'Bronze I',           color: '#cd7f32' },
-  2:  { name: 'Bronze II',          color: '#cd7f32' },
-  3:  { name: 'Bronze III',         color: '#cd7f32' },
-  4:  { name: 'Silver I',           color: '#a8a9ad' },
-  5:  { name: 'Silver II',          color: '#a8a9ad' },
-  6:  { name: 'Silver III',         color: '#a8a9ad' },
-  7:  { name: 'Gold I',             color: '#ffd700' },
-  8:  { name: 'Gold II',            color: '#ffd700' },
-  9:  { name: 'Gold III',           color: '#ffd700' },
-  10: { name: 'Platinum I',         color: '#00b4d8' },
-  11: { name: 'Platinum II',        color: '#00b4d8' },
-  12: { name: 'Platinum III',       color: '#00b4d8' },
-  13: { name: 'Diamond I',          color: '#4cc9f0' },
-  14: { name: 'Diamond II',         color: '#4cc9f0' },
-  15: { name: 'Diamond III',        color: '#4cc9f0' },
-  16: { name: 'Champion I',         color: '#9b5de5' },
-  17: { name: 'Champion II',        color: '#9b5de5' },
-  18: { name: 'Champion III',       color: '#9b5de5' },
-  19: { name: 'Grand Champion I',   color: '#f72585' },
-  20: { name: 'Grand Champion II',  color: '#f72585' },
-  21: { name: 'Grand Champion III', color: '#f72585' },
-  22: { name: 'Supersonic Legend',  color: '#ff9e00' },
-}
-
 // ─── Sample data for demo mode ────────────────────────────────────────────────
 
 const SAMPLE_STATS: Stats = {
-  gamesAnalyzed: 10, goalsPerGame: 1.4, assistsPerGame: 0.8,
-  savesPerGame: 1.2, shotsPerGame: 4.1, shotAccuracy: 34.1,
-  avgScore: 412, avgBoost: 52, boostStolenPerGame: 98, bigPadsPerGame: 2.3,
-  avgSpeed: 1340, supersonicPct: 13.2, slowPct: 41.8,
-  offensivePct: 38.4, defensivePct: 24.1, neutralPct: 37.5,
-  demosInflictedPerGame: 0.6, demosTakenPerGame: 0.4,
+  gamesAnalyzed: 10,
+  goalsPerGame: 1.4,
+  assistsPerGame: 0.8,
+  savesPerGame: 1.2,
+  shotsPerGame: 4.1,
+  shotAccuracy: 34.1,
+  avgScore: 412,
+  avgBoost: 52,
+  boostStolenPerGame: 98,
+  bigPadsPerGame: 2.3,
+  avgSpeed: 1340,
+  supersonicPct: 13.2,
+  slowPct: 41.8,
+  offensivePct: 38.4,
+  defensivePct: 24.1,
+  neutralPct: 37.5,
+  demosInflictedPerGame: 0.6,
+  demosTakenPerGame: 0.4,
   playerName: 'SamplePlayer',
   playerRank: { tier: 14 },
   topTeammates: [],
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type MatchType = 'exact' | 'normalized' | 'starts-with' | 'substring'
-type PlayerCandidate = { name: string; platform: string; id: string; replayCount: number; matchType: MatchType }
-type DiscoverResponse = { candidates: PlayerCandidate[]; searchName: string; cached: boolean; error?: string; errorCode?: string }
-type ApiResponse = { stats?: Stats; replayCount?: number; error?: string; cached?: boolean }
-type UploadResponse = { players?: { id: string; platform: string; name: string; stats: object }[]; error?: string }
-type UploadPlayer = { id: string; platform: string; name: string; stats: object }
-
-function displayName(name: string): string {
-  if (!name || /^\*+$/.test(name.trim())) return 'Hidden Player'
-  return name
-}
-
+// Convert a single replay's raw stats object into the Stats shape
 function singleReplayToStats(raw: Record<string, Record<string, number>>): Stats {
   const c = raw?.core ?? {}, b = raw?.boost ?? {}, m = raw?.movement ?? {}
   const pos = raw?.positioning ?? {}, d = raw?.demo ?? {}
   return {
-    gamesAnalyzed: 1, goalsPerGame: c.goals ?? 0, assistsPerGame: c.assists ?? 0,
-    savesPerGame: c.saves ?? 0, shotsPerGame: c.shots ?? 0,
+    gamesAnalyzed: 1,
+    goalsPerGame: c.goals ?? 0,
+    assistsPerGame: c.assists ?? 0,
+    savesPerGame: c.saves ?? 0,
+    shotsPerGame: c.shots ?? 0,
     shotAccuracy: c.shots > 0 ? +((c.goals / c.shots) * 100).toFixed(1) : 0,
-    avgScore: c.score ?? 0, avgBoost: b.avg_amount ?? 0,
-    boostStolenPerGame: b.amount_stolen ?? 0, bigPadsPerGame: b.amount_collected_big ?? 0,
-    avgSpeed: m.avg_speed ?? 0, supersonicPct: m.percent_supersonic_speed ?? 0,
-    slowPct: m.percent_slow_speed ?? 0, offensivePct: pos.percent_offensive_third ?? 0,
-    defensivePct: pos.percent_defensive_third ?? 0, neutralPct: pos.percent_neutral_third ?? 0,
-    demosInflictedPerGame: d.inflicted ?? 0, demosTakenPerGame: d.taken ?? 0,
+    avgScore: c.score ?? 0,
+    avgBoost: b.avg_amount ?? 0,
+    boostStolenPerGame: b.amount_stolen ?? 0,
+    bigPadsPerGame: b.amount_collected_big ?? 0,
+    avgSpeed: m.avg_speed ?? 0,
+    supersonicPct: m.percent_supersonic_speed ?? 0,
+    slowPct: m.percent_slow_speed ?? 0,
+    offensivePct: pos.percent_offensive_third ?? 0,
+    defensivePct: pos.percent_defensive_third ?? 0,
+    neutralPct: pos.percent_neutral_third ?? 0,
+    demosInflictedPerGame: d.inflicted ?? 0,
+    demosTakenPerGame: d.taken ?? 0,
   }
-}
-
-// ─── Logo Mark ───────────────────────────────────────────────────────────────
-
-function LogoMark({ size = 28 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-      <path d="M14 2L24.39 8V20L14 26L3.61 20V8L14 2Z" fill="#FF5C1A" fillOpacity="0.12" stroke="#FF5C1A" strokeWidth="1.2"/>
-      <path d="M9 19L17 9" stroke="#FF5C1A" strokeWidth="2.2" strokeLinecap="round"/>
-      <circle className="boost-dot" cx="17.5" cy="9.5" r="2.5" fill="#FF5C1A"/>
-      <path d="M7 14H11" stroke="#FF5C1A" strokeWidth="1.2" strokeLinecap="round" strokeOpacity="0.45"/>
-      <path d="M7 17H10" stroke="#FF5C1A" strokeWidth="1" strokeLinecap="round" strokeOpacity="0.25"/>
-    </svg>
-  )
 }
 
 // ─── Coaching Card ────────────────────────────────────────────────────────────
@@ -120,7 +110,6 @@ function CoachingCard({ tip, index, connected }: { tip: Tip; index: number; conn
     <div
       className={`coaching-card ${sev}${connected ? ' connected' : ''}`}
       style={{ animationDelay: `${index * 60}ms` }}
-
     >
       <div
         style={{ padding: '16px 20px 16px 24px', cursor: 'pointer' }}
@@ -342,7 +331,10 @@ export default function Home() {
     const data: UploadResponse = await fetch('/api/upload', { method: 'POST', body: form }).then(r => r.json())
     setUploadResult(data); setUploadLoading(false)
   }
-
+  function displayName(name: string): string {
+  if (!name || /^\*+$/.test(name.trim())) return 'Hidden Player'
+  return name
+  }
   function loadDemo() {
     setDemoMode(true)
     setIdResult(null)
@@ -354,12 +346,19 @@ export default function Home() {
     : tab === 'id' ? (idResult?.stats ?? null)
     : tab === 'upload' && selectedPlayer ? singleReplayToStats(selectedPlayer.stats as Record<string, Record<string, number>>)
     : null
-
+  
   const tips = activeStats ? generateAdvice(activeStats) : []
   const sorted = [...tips].sort((a, b) => ({ critical: 0, warning: 1, good: 2 }[a.severity]) - ({ critical: 0, warning: 1, good: 2 }[b.severity]))
   const practice = getPracticeTonight(sorted)
-  const rankInfo = (demoMode ? SAMPLE_STATS : idResult?.stats)?.playerRank?.tier != null
-    ? (RANK_NAMES[(demoMode ? SAMPLE_STATS : idResult!.stats!)!.playerRank!.tier!] ?? null) : null
+  const rankTier = (demoMode ? SAMPLE_STATS : idResult?.stats)?.playerRank?.tier
+  const rankInfo = rankTier != null ? getRankInfo(rankTier) : null
+
+  // Derive mascot state from app state
+  const boostState: BoostState =
+    idLoading || uploadLoading ? 'analyzing'
+    : activeStats && sorted.length > 0 ? 'success'
+    : idResult?.error ? 'error'
+    : 'idle'
 
   const inputStyle: React.CSSProperties = {
     background: 'var(--surface-2)', border: '1px solid var(--border-2)',
@@ -371,12 +370,6 @@ export default function Home() {
     borderRadius: '2px', padding: '10px 12px', fontSize: '12px',
     color: 'var(--muted)', fontFamily: 'var(--font-geist-mono)', outline: 'none',
   }
-  // Mascot state — loading, results, error, or idle only
-  const boostState: BoostState =
-    idLoading || uploadLoading ? 'analyzing'
-    : activeStats && sorted.length > 0 ? 'success'
-    : idResult?.error ? 'error'
-    : 'idle'
 
   return (
     <main className="page-grid" style={{ minHeight: '100vh', background: 'var(--pitch)', color: 'var(--chalk)' }}>
@@ -534,7 +527,7 @@ export default function Home() {
                     <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Who are you?</p>
                     {uploadResult.players.map(p => (
                       <button key={p.id} onClick={() => { setSelectedPlayer(p); setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80) }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', padding: '10px 14px', cursor: 'pointer', color: 'var(--chalk)' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(p.name)}</span>
+                        <span style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(p.name ?? '')}</span>
                         <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase' }}>{p.platform}</span>
                       </button>
                     ))}
@@ -542,7 +535,7 @@ export default function Home() {
                 )}
                 {selectedPlayer && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-2)', border: '1px solid var(--border-2)', borderRadius: '2px', padding: '10px 14px' }}>
-                    <p style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(selectedPlayer.name)}</p>
+                    <p style={{ fontSize: '13px', fontWeight: 500 }}>{displayName(selectedPlayer.name ?? '')}</p>
                     <button onClick={() => { setSelectedPlayer(null); setUploadResult(null) }} style={{ fontSize: '11px', color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
                   </div>
                 )}
@@ -574,9 +567,12 @@ export default function Home() {
                   {demoMode ? 'Sample Analysis' : displayName(searchedPlayer?.name ?? playerId)}
                 </p>
                 {rankInfo && (
-                  <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '2px', border: `1px solid ${rankInfo.color}35`, background: `${rankInfo.color}12`, color: rankInfo.color }}>
-                    {rankInfo.name}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: `${rankInfo.color}10`, border: `1px solid ${rankInfo.color}30`, borderRadius: '4px', padding: '3px 8px 3px 4px' }}>
+                    <RankIcon tier={rankInfo.tier} size={18} showGlow={false} />
+                    <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '11px', color: rankInfo.color, fontWeight: 600, letterSpacing: '0.04em' }}>
+                      {rankInfo.name}
+                    </span>
+                  </div>
                 )}
                 {demoMode && (
                   <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', padding: '2px 8px', borderRadius: '2px', border: '1px solid rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.08)', color: '#F5A623' }}>
@@ -613,8 +609,7 @@ export default function Home() {
 
           {/* ── What to practice tonight ── */}
           {practice && (
-            <div className="practice-section" style={{ padding: '20px 20px 20px 26px', marginBottom: '40px' }}
->
+            <div className="practice-section" style={{ padding: '20px 20px 20px 26px', marginBottom: '40px' }}>
               <p style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: '#FF5C1A', textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: '8px' }}>
                 // What to practice tonight
               </p>

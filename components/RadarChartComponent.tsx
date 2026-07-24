@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { memo, useState, useCallback, useMemo, useRef } from 'react'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   ResponsiveContainer, Tooltip,
@@ -241,14 +241,14 @@ interface RadarProps {
   onAxisHover?: (category: string | null) => void
 }
 
-export default function RadarChartComponent({ stats, onAxisHover }: RadarProps) {
+function RadarChartComponent({ stats, onAxisHover }: RadarProps) {
   const [selectedRank, setSelectedRank] = useState<RankKey>('Diamond')
   const [hoveredData, setHoveredData] = useState<DataPoint | null>(null)
 
   const bench = RANK_BENCHMARKS[selectedRank]
   const rankMeta = RANKS.find(r => r.key === selectedRank)!
 
-  const data: DataPoint[] = [
+  const data: DataPoint[] = useMemo(() => [
     {
       label: 'Shooting',
       player:       normalize(stats.shotAccuracy,  RANGES.shooting.min,   RANGES.shooting.max),
@@ -291,7 +291,7 @@ export default function RadarChartComponent({ stats, onAxisHover }: RadarProps) 
       rawPlayer:    stats.shotsPerGame,
       rawBenchmark: bench.shots,
     },
-  ]
+  ], [stats, bench])
 
   const handleData = useCallback((d: DataPoint | null) => {
     setHoveredData(d)
@@ -365,7 +365,8 @@ export default function RadarChartComponent({ stats, onAxisHover }: RadarProps) 
               dataKey="label"
               tick={(props) => {
                 const { x, y, payload, textAnchor } = props as {
-                  x: number; y: number; payload: { value: string }; textAnchor: string
+                  x: number; y: number; payload: { value: string }
+                  textAnchor: 'inherit' | 'end' | 'start' | 'middle'
                 }
                 const isActive = hoveredData?.label === payload.value
                 return (
@@ -400,3 +401,5 @@ export default function RadarChartComponent({ stats, onAxisHover }: RadarProps) 
     </div>
   )
 }
+
+export default memo(RadarChartComponent)

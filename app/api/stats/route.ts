@@ -185,6 +185,7 @@ export async function GET(req: NextRequest) {
 type Player = {
   id?: { platform?: string; id?: string }
   name?: string
+  rank?: { tier?: number; division?: number; name?: string }
   stats?: {
     core?: { score?: number; goals?: number; assists?: number; saves?: number; shots?: number; shooting_percentage?: number }
     boost?: { avg_amount?: number; amount_stolen?: number; amount_collected_big?: number }
@@ -218,7 +219,7 @@ function aggregateStats(replays: Replay[], playerId: string) {
 
   const teammateMap: Record<string, { name: string; id: string; platform: string; count: number }> = {}
   let playerName: string | undefined
-
+  let playerRank: { tier?: number; division?: number; name?: string } | undefined
   for (const replay of replays) {
     if (!replay || typeof replay !== 'object') continue
     const blue = replay.blue?.players ?? []
@@ -229,7 +230,7 @@ function aggregateStats(replays: Replay[], playerId: string) {
     if (!me) continue
 
     if (!playerName && me.name) playerName = me.name
-
+    if (!playerRank && me.rank) playerRank = me.rank
     const myTeam = blue.find(p => p.id?.id === me.id?.id) ? blue : orange
     for (const p of myTeam) {
       if (p.id?.id === me.id?.id) continue
@@ -273,6 +274,7 @@ function aggregateStats(replays: Replay[], playerId: string) {
 
   return {
     playerName,
+    playerRank,
     gamesAnalyzed:         totals.count,
     goalsPerGame:          +(totals.goals / n).toFixed(2),
     assistsPerGame:        +(totals.assists / n).toFixed(2),
