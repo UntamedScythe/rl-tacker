@@ -7,6 +7,7 @@ import RankIcon, { getRankInfo } from '@/components/RankIcon'
 import Boost, { type BoostState } from '@/components/Boost'
 import FieldZoneChart from '@/components/FieldZoneChart'
 import type { DiscoverResponse, PlayerCandidate } from '@/lib/discover'
+import { extractGameStats, aggregateGameStats, type PlayerStatsBlock } from '@/lib/metrics'
 
 type ApiResponse = {
   stats?: Stats
@@ -73,30 +74,11 @@ const SAMPLE_STATS: Stats = {
   topTeammates: [],
 }
 
-// Convert a single replay's raw stats object into the Stats shape
-function singleReplayToStats(raw: Record<string, Record<string, number>>): Stats {
-  const c = raw?.core ?? {}, b = raw?.boost ?? {}, m = raw?.movement ?? {}
-  const pos = raw?.positioning ?? {}, d = raw?.demo ?? {}
-  return {
-    gamesAnalyzed: 1,
-    goalsPerGame: c.goals ?? 0,
-    assistsPerGame: c.assists ?? 0,
-    savesPerGame: c.saves ?? 0,
-    shotsPerGame: c.shots ?? 0,
-    shotAccuracy: c.shots > 0 ? +((c.goals / c.shots) * 100).toFixed(1) : 0,
-    avgScore: c.score ?? 0,
-    avgBoost: b.avg_amount ?? 0,
-    boostStolenPerGame: b.amount_stolen ?? 0,
-    bigPadsPerGame: b.amount_collected_big ?? 0,
-    avgSpeed: m.avg_speed ?? 0,
-    supersonicPct: m.percent_supersonic_speed ?? 0,
-    slowPct: m.percent_slow_speed ?? 0,
-    offensivePct: pos.percent_offensive_third ?? 0,
-    defensivePct: pos.percent_defensive_third ?? 0,
-    neutralPct: pos.percent_neutral_third ?? 0,
-    demosInflictedPerGame: d.inflicted ?? 0,
-    demosTakenPerGame: d.taken ?? 0,
-  }
+// Convert a single replay's raw stats object into the Stats shape — delegates
+// to the same extraction/averaging formulas the live search flow uses, so a
+// single uploaded replay is scored identically to one game within a 10-game analysis.
+export function singleReplayToStats(raw: PlayerStatsBlock): Stats {
+  return aggregateGameStats([extractGameStats(raw)])
 }
 
 // ─── Coaching Card ────────────────────────────────────────────────────────────
@@ -344,7 +326,7 @@ export default function Home() {
 
   const activeStats: Stats | null = demoMode ? SAMPLE_STATS
     : tab === 'id' ? (idResult?.stats ?? null)
-    : tab === 'upload' && selectedPlayer ? singleReplayToStats(selectedPlayer.stats as Record<string, Record<string, number>>)
+    : tab === 'upload' && selectedPlayer ? singleReplayToStats(selectedPlayer.stats as PlayerStatsBlock)
     : null
   
   const tips = activeStats ? generateAdvice(activeStats) : []

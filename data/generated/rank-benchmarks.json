@@ -1,0 +1,142 @@
+{
+  "generatedAt": "2026-07-24T05:35:24.074Z",
+  "playlist": "ranked-doubles",
+  "proofOfConcept": true,
+  "revision": "multi-game (up to 5 games/player), anomaly-symmetric shot accuracy",
+  "metricVersion": 3,
+  "benchmarks": {
+    "diamond-2": {
+      "sampleSize": 199,
+      "uniquePlayers": 199,
+      "uniqueReplays": 338,
+      "gamesPerPlayerHistogram": {
+        "1": 80,
+        "2": 38,
+        "3": 23,
+        "4": 15,
+        "5": 43
+      },
+      "metrics": {
+        "shotAccuracyRatio": {
+          "mean": 40.32,
+          "median": 42.5,
+          "p25": 25,
+          "p75": 52.25,
+          "stdev": 25.38
+        },
+        "shotAccuracyMeanReported": {
+          "mean": 39.06,
+          "median": 40,
+          "p25": 22.3,
+          "p75": 52,
+          "stdev": 25.9
+        },
+        "savesPerGame": {
+          "mean": 1.5,
+          "median": 1.33,
+          "p25": 1,
+          "p75": 2,
+          "stdev": 0.96
+        },
+        "avgBoost": {
+          "mean": 50.92,
+          "median": 51,
+          "p25": 47.65,
+          "p75": 54,
+          "stdev": 5
+        },
+        "supersonicPct": {
+          "mean": 10.69,
+          "median": 10.3,
+          "p25": 8.3,
+          "p75": 12.55,
+          "stdev": 3.41
+        },
+        "neutralPct": {
+          "mean": 30.11,
+          "median": 29.8,
+          "p25": 28.25,
+          "p75": 32,
+          "stdev": 3.41
+        },
+        "shotsPerGame": {
+          "mean": 3.42,
+          "median": 3.4,
+          "p25": 2.4,
+          "p75": 4.4,
+          "stdev": 1.48
+        },
+        "goalsPerGame": {
+          "mean": 1.38,
+          "median": 1.33,
+          "p25": 0.75,
+          "p75": 2,
+          "stdev": 0.98
+        },
+        "assistsPerGame": {
+          "mean": 0.56,
+          "median": 0.5,
+          "p25": 0,
+          "p75": 1,
+          "stdev": 0.59
+        },
+        "avgScore": {
+          "mean": 448.3,
+          "median": 453,
+          "p25": 354.5,
+          "p75": 547,
+          "stdev": 149.95
+        },
+        "avgSpeed": {
+          "mean": 1455.86,
+          "median": 1450.5,
+          "p25": 1410.9,
+          "p75": 1503.6,
+          "stdev": 76.93
+        },
+        "slowPct": {
+          "mean": 51.01,
+          "median": 50.9,
+          "p25": 47.3,
+          "p75": 54.5,
+          "stdev": 5.85
+        },
+        "offensivePct": {
+          "mean": 21.34,
+          "median": 21.3,
+          "p25": 18.1,
+          "p75": 24.3,
+          "stdev": 4.29
+        },
+        "defensivePct": {
+          "mean": 48.55,
+          "median": 48.4,
+          "p25": 44.85,
+          "p75": 52.05,
+          "stdev": 5.7
+        }
+      },
+      "metricNullCounts": {
+        "shotAccuracyRatio": 3,
+        "shotAccuracyMeanReported": 0,
+        "savesPerGame": 0,
+        "avgBoost": 0,
+        "supersonicPct": 0,
+        "neutralPct": 0,
+        "shotsPerGame": 0,
+        "goalsPerGame": 0,
+        "assistsPerGame": 0,
+        "avgScore": 0,
+        "avgSpeed": 0,
+        "slowPct": 0,
+        "offensivePct": 0,
+        "defensivePct": 0
+      },
+      "gameQuality": {
+        "zeroShotGames": 11,
+        "zeroGoalWithShotsGames": 117,
+        "shootingPctAnomaliesExcludedFromBothMethods": 3
+      }
+    }
+  }
+}

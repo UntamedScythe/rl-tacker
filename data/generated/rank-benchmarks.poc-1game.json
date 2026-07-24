@@ -1,0 +1,122 @@
+{
+  "generatedAt": "2026-07-24T05:00:12.443Z",
+  "playlist": "ranked-doubles",
+  "proofOfConcept": true,
+  "metricVersion": 1,
+  "benchmarks": {
+    "diamond-2": {
+      "sampleSize": 200,
+      "uniquePlayers": 200,
+      "uniqueReplays": 72,
+      "gamesPerPlayer": 1,
+      "dataWindow": {
+        "note": "replay-date desc, most recent available at collection time"
+      },
+      "metrics": {
+        "shotAccuracy": {
+          "mean": 38.6,
+          "median": 33.3,
+          "p25": 0,
+          "p75": 50,
+          "stdev": 35.36
+        },
+        "savesPerGame": {
+          "mean": 1.5,
+          "median": 1,
+          "p25": 1,
+          "p75": 2,
+          "stdev": 1.2
+        },
+        "avgBoost": {
+          "mean": 51.12,
+          "median": 51.3,
+          "p25": 47.58,
+          "p75": 54.8,
+          "stdev": 5.91
+        },
+        "supersonicPct": {
+          "mean": 10.98,
+          "median": 10.75,
+          "p25": 8.28,
+          "p75": 13.43,
+          "stdev": 3.73
+        },
+        "neutralPct": {
+          "mean": 30.19,
+          "median": 30.05,
+          "p25": 27.18,
+          "p75": 32.8,
+          "stdev": 4.09
+        },
+        "shotsPerGame": {
+          "mean": 3.42,
+          "median": 3,
+          "p25": 2,
+          "p75": 5,
+          "stdev": 1.93
+        },
+        "goalsPerGame": {
+          "mean": 1.36,
+          "median": 1,
+          "p25": 0,
+          "p75": 2,
+          "stdev": 1.23
+        },
+        "assistsPerGame": {
+          "mean": 0.52,
+          "median": 0,
+          "p25": 0,
+          "p75": 1,
+          "stdev": 0.77
+        },
+        "avgScore": {
+          "mean": 442.38,
+          "median": 432,
+          "p25": 274,
+          "p75": 573,
+          "stdev": 199.3
+        },
+        "avgSpeed": {
+          "mean": 1458.87,
+          "median": 1448,
+          "p25": 1405,
+          "p75": 1518.5,
+          "stdev": 87.93
+        },
+        "slowPct": {
+          "mean": 50.94,
+          "median": 50.75,
+          "p25": 46.75,
+          "p75": 54.92,
+          "stdev": 6.68
+        },
+        "offensivePct": {
+          "mean": 21.52,
+          "median": 21.65,
+          "p25": 17.75,
+          "p75": 24.82,
+          "stdev": 5.43
+        },
+        "defensivePct": {
+          "mean": 48.28,
+          "median": 48.15,
+          "p25": 44.3,
+          "p75": 52.52,
+          "stdev": 6.81
+        }
+      },
+      "collection": {
+        "listCallsUsed": 12,
+        "detailCallsUsed": 72,
+        "rejections": {
+          "missingOrMismatchedRank": 52,
+          "duplicatePlayer": 36,
+          "duplicateReplay": 0,
+          "malformedStats": 0,
+          "wrongPlaylistOrSeason": 0,
+          "noNewCandidateInListPreview": 2002
+        }
+      }
+    }
+  }
+}

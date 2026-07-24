@@ -6,6 +6,7 @@ import {
   ResponsiveContainer, Tooltip,
 } from 'recharts'
 import type { Stats } from '@/lib/advice'
+import { RANK_BENCHMARKS, type RankKey } from '@/lib/rankBenchmarks'
 
 function normalize(value: number, min: number, max: number) {
   return Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))
@@ -61,17 +62,6 @@ const AXIS_CONTEXT: Record<string, {
   },
 }
 
-const RANK_BENCHMARKS = {
-  Bronze:   { shotAccuracy: 18, saves: 0.8,  boost: 38, supersonic: 6,  neutral: 28, shots: 1.5 },
-  Silver:   { shotAccuracy: 22, saves: 1.0,  boost: 43, supersonic: 9,  neutral: 30, shots: 1.8 },
-  Gold:     { shotAccuracy: 26, saves: 1.2,  boost: 48, supersonic: 11, neutral: 31, shots: 2.0 },
-  Platinum: { shotAccuracy: 29, saves: 1.4,  boost: 52, supersonic: 13, neutral: 32, shots: 2.2 },
-  Diamond:  { shotAccuracy: 33, saves: 1.6,  boost: 56, supersonic: 15, neutral: 33, shots: 2.5 },
-  Champion: { shotAccuracy: 37, saves: 1.8,  boost: 60, supersonic: 18, neutral: 34, shots: 2.8 },
-  GC:       { shotAccuracy: 41, saves: 2.1,  boost: 64, supersonic: 22, neutral: 35, shots: 3.1 },
-  SSL:      { shotAccuracy: 46, saves: 2.4,  boost: 68, supersonic: 26, neutral: 37, shots: 3.5 },
-}
-
 const RANKS = [
   { key: 'Bronze',   label: 'B',   color: '#cd7f32', full: 'Bronze'            },
   { key: 'Silver',   label: 'S',   color: '#a8a9ad', full: 'Silver'            },
@@ -83,8 +73,6 @@ const RANKS = [
   { key: 'SSL',      label: 'SSL', color: '#ff9e00', full: 'Supersonic Legend' },
 ]
 
-type RankKey = keyof typeof RANK_BENCHMARKS
-
 type DataPoint = {
   label: string
   player: number
@@ -94,10 +82,11 @@ type DataPoint = {
 }
 
 // ── Tooltip panel — fixed below chart, never overlaps ───────────────────────
-function TooltipPanel({ data, rankColor, rankFull }: {
+function TooltipPanel({ data, rankColor, rankFull, sampleDetail }: {
   data: DataPoint | null
   rankColor: string
   rankFull: string
+  sampleDetail?: string
 }) {
   if (!data) {
     return (
@@ -200,6 +189,17 @@ function TooltipPanel({ data, rankColor, rankFull }: {
       <p style={{ fontSize: '13px', color: isStrong ? '#22C97A' : '#B8BCC8', lineHeight: 1.7 }}>
         {isStrong ? ctx?.high : ctx?.low}
       </p>
+
+      {/* Sample provenance — only present for measured ranks */}
+      {sampleDetail && (
+        <p style={{
+          marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)',
+          fontFamily: 'var(--font-geist-mono)', fontSize: '10px', color: 'rgba(184,188,200,0.6)',
+          lineHeight: 1.6,
+        }}>
+          {sampleDetail}
+        </p>
+      )}
     </div>
   )
 }
@@ -245,7 +245,8 @@ function RadarChartComponent({ stats, onAxisHover }: RadarProps) {
   const [selectedRank, setSelectedRank] = useState<RankKey>('Diamond')
   const [hoveredData, setHoveredData] = useState<DataPoint | null>(null)
 
-  const bench = RANK_BENCHMARKS[selectedRank]
+  const benchEntry = RANK_BENCHMARKS[selectedRank]
+  const bench = benchEntry.metrics
   const rankMeta = RANKS.find(r => r.key === selectedRank)!
 
   const data: DataPoint[] = useMemo(() => [
@@ -317,25 +318,33 @@ function RadarChartComponent({ stats, onAxisHover }: RadarProps) {
           fontFamily: 'var(--font-geist-mono)', fontSize: '9px',
           color: 'rgba(76,201,240,0.4)', marginLeft: 'auto', letterSpacing: '0.08em',
         }}>
-          vs rank benchmark
+          {benchEntry.source === 'measured'
+            ? `vs ${benchEntry.sampleMeta!.rank} measured benchmark (n=${benchEntry.sampleMeta!.uniquePlayers})`
+            : 'vs estimated rank benchmark'}
         </span>
       </div>
 
       {/* Rank selector */}
       <div style={{ display: 'flex', gap: '3px', marginBottom: '12px', overflowX: 'auto', paddingBottom: '2px' }}>
-        {RANKS.map(rank => (
-          <button key={rank.key} onClick={() => setSelectedRank(rank.key as RankKey)}
-            title={rank.full} style={{
-              flexShrink: 0, padding: '3px 9px', borderRadius: '2px',
-              fontSize: '10px', fontFamily: 'var(--font-geist-mono)',
-              fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s', border: 'none',
-              background: selectedRank === rank.key ? rank.color : 'transparent',
-              color: selectedRank === rank.key ? '#000' : rank.color,
-              outline: selectedRank === rank.key ? 'none' : `1px solid ${rank.color}40`,
-            }}>
-            {rank.label}
-          </button>
-        ))}
+        {RANKS.map(rank => {
+          const entry = RANK_BENCHMARKS[rank.key as RankKey]
+          const title = entry.source === 'measured'
+            ? `${entry.sampleMeta!.rank} benchmark — measured from ${entry.sampleMeta!.uniquePlayers} public player samples`
+            : rank.full
+          return (
+            <button key={rank.key} onClick={() => setSelectedRank(rank.key as RankKey)}
+              title={title} style={{
+                flexShrink: 0, padding: '3px 9px', borderRadius: '2px',
+                fontSize: '10px', fontFamily: 'var(--font-geist-mono)',
+                fontWeight: 700, cursor: 'pointer', transition: 'all 0.15s', border: 'none',
+                background: selectedRank === rank.key ? rank.color : 'transparent',
+                color: selectedRank === rank.key ? '#000' : rank.color,
+                outline: selectedRank === rank.key ? 'none' : `1px solid ${rank.color}40`,
+              }}>
+              {rank.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Legend */}
@@ -396,7 +405,18 @@ function RadarChartComponent({ stats, onAxisHover }: RadarProps) {
       </div>
 
       {/* Fixed tooltip panel below chart */}
-      <TooltipPanel data={hoveredData} rankColor={rankMeta.color} rankFull={rankMeta.full} />
+      <TooltipPanel
+        data={hoveredData}
+        rankColor={rankMeta.color}
+        rankFull={rankMeta.full}
+        sampleDetail={benchEntry.source === 'measured' ? [
+          benchEntry.sampleMeta!.rank,
+          benchEntry.sampleMeta!.playlist,
+          `${benchEntry.sampleMeta!.uniquePlayers} unique players`,
+          benchEntry.sampleMeta!.gamesPerPlayer,
+          benchEntry.sampleMeta!.disclaimer,
+        ].join(' · ') : undefined}
+      />
 
     </div>
   )
